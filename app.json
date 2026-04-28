@@ -1,0 +1,29 @@
+{
+  "expo": {
+    "name": "Employee Management",
+    "slug": "emp-manage-frontend",
+    "scheme": "empmanage",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#F7FBFF"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": false
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#F7FBFF"
+      }
+    },
+    "plugins": [
+      "expo-router"
+    ]
+  }
+}
