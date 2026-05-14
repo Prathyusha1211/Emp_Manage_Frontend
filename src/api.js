@@ -46,6 +46,13 @@ export function registerUser(payload) {
   });
 }
 
+export function resetUserPassword(payload) {
+  return request("/user/forgot-password", {
+    method: "POST",
+    body: payload
+  });
+}
+
 export function getAttendanceByDate(date, token) {
   return request(`/attendance/date?date=${encodeURIComponent(date)}`, {
     token
@@ -92,6 +99,13 @@ export function getBills(token) {
 
 export function getBillById(billId, token) {
   return request(`/bill/${encodeURIComponent(billId)}`, {
+    token
+  });
+}
+
+export function deleteBill(billId, token) {
+  return request(`/bill/delete/${encodeURIComponent(billId)}`, {
+    method: "DELETE",
     token
   });
 }

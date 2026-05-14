@@ -10,6 +10,10 @@
     "web": "expo start --web"
   },
   "dependencies": {
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.1",
+    "@mui/icons-material": "^9.0.1",
+    "@mui/material": "^9.0.1",
     "expo": "^53.0.0",
     "expo-router": "~5.1.11",
     "expo-status-bar": "~2.2.3",

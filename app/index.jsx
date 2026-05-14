@@ -22,7 +22,29 @@ import Animated, {
   withTiming
 } from "react-native-reanimated";
 import {
+  Add as AddIcon,
+  CalendarMonth as CalendarMonthIcon,
+  Check as CheckIcon,
+  CheckCircle as CheckCircleIcon,
+  ChevronLeft as ChevronLeftIcon,
+  ChevronRight as ChevronRightIcon,
+  Close as CloseIcon,
+  CurrencyRupee as CurrencyRupeeIcon,
+  Delete as DeleteIcon,
+  Edit as EditIcon,
+  ExpandMore as ExpandMoreIcon,
+  FileDownload as FileDownloadIcon,
+  Groups as GroupsIcon,
+  Home as HomeIcon,
+  Logout as MuiLogoutIcon,
+  PersonAddAlt1 as PersonAddAlt1Icon,
+  Remove as RemoveIcon,
+  Visibility as VisibilityIcon,
+  VisibilityOff as VisibilityOffIcon
+} from "@mui/icons-material";
+import {
   addWorker,
+  deleteBill,
   editWorker,
   getAttendanceByDate,
   getBillById,
@@ -30,6 +52,7 @@ import {
   loginUser,
   markAttendance,
   registerUser,
+  resetUserPassword,
   storeBill
 } from "../src/api";
 
@@ -209,38 +232,6 @@ function hasRecordedAttendance(workers) {
   );
 }
 
-function createGeneratedBill(dateKey, workers) {
-  const presentWorkers = workers
-    .filter((worker) => worker.attendanceStatus === "present")
-    .map((worker) => {
-      const wage = Number(worker.wage) || 0;
-
-      return {
-        id: worker._id,
-        name: worker.name,
-        wage,
-        total: wage
-      };
-    })
-    .sort((left, right) => left.name.localeCompare(right.name));
-
-  const absentCount = workers.filter((worker) => worker.attendanceStatus === "absent").length;
-  const totalAmount = presentWorkers.reduce((sum, worker) => sum + worker.total, 0);
-
-  return {
-    dateKey,
-    displayDate: formatDisplayDate(dateKey),
-    monthKey: getMonthKey(dateKey),
-    rows: presentWorkers,
-    presentCount: presentWorkers.length,
-    absentCount,
-    workerTotal: totalAmount,
-    extraExpenses: [],
-    extraExpensesTotal: 0,
-    totalAmount
-  };
-}
-
 function normalizeStoredBillPayload(storedBill) {
   const payload = storedBill?.generatedBillData || storedBill?.billData || {};
   const rawRows = Array.isArray(payload?.rows)
@@ -278,27 +269,33 @@ function normalizeStoredBillPayload(storedBill) {
     Number(payload?.total) ||
     workerTotal + extraExpensesTotal;
   const fromDateKey = normalizeStoredDateKey(payload?.fromDateKey);
-  const dateKey =
-    normalizeStoredDateKey(payload?.toDateKey) ||
+  const toDateKey = normalizeStoredDateKey(payload?.toDateKey);
+  const generatedDateKey =
+    normalizeStoredDateKey(payload?.generatedDateKey) ||
     normalizeStoredDateKey(storedBill?.date) ||
     normalizeStoredDateKey(storedBill?.generatedDate);
-  const toDateKey = normalizeStoredDateKey(payload?.toDateKey) || dateKey;
-  const displayDate =
-    fromDateKey && toDateKey && fromDateKey !== toDateKey
-      ? `${formatDisplayDate(fromDateKey)} to ${formatDisplayDate(toDateKey)}`
-      : formatDisplayDate(dateKey);
-  const monthKey = getMonthKey(toDateKey || dateKey);
+  const dateKey = generatedDateKey || toDateKey || fromDateKey;
+  const rangeToDateKey = toDateKey || dateKey;
+  const displayDate = formatDisplayDate(dateKey);
+  const rangeDisplayDate =
+    fromDateKey && rangeToDateKey && fromDateKey !== rangeToDateKey
+      ? `${formatDisplayDate(fromDateKey)} to ${formatDisplayDate(rangeToDateKey)}`
+      : fromDateKey
+        ? formatDisplayDate(fromDateKey)
+        : displayDate;
+  const monthKey = getMonthKey(dateKey);
 
   return {
     id: storedBill?._id,
     dateKey,
     displayDate,
+    rangeDisplayDate,
     monthKey,
     rows,
     presentCount,
     absentCount,
     fromDateKey,
-    toDateKey,
+    toDateKey: rangeToDateKey,
     workerTotal,
     extraExpenses,
     extraExpensesTotal,
@@ -318,10 +315,24 @@ function createStoredBillPayload(bill) {
     extraExpensesTotal: bill.extraExpensesTotal || 0,
     fromDateKey: bill.fromDateKey || bill.dateKey,
     toDateKey: bill.toDateKey || bill.dateKey,
+    generatedDateKey: bill.dateKey,
     totalAmount: bill.totalAmount,
     grandTotal: bill.totalAmount,
     total: bill.totalAmount
   };
+}
+
+function getGeneratedBillKey(bill) {
+  return (
+    bill?.id ||
+    [
+      bill?.dateKey || "bill",
+      bill?.fromDateKey || "",
+      bill?.toDateKey || "",
+      bill?.totalAmount ?? "",
+      bill?.rows?.length ?? ""
+    ].join("|")
+  );
 }
 
 function buildBillDocumentHtml(bill, contractorName) {
@@ -662,7 +673,7 @@ function isLikelyPhoneValue(value) {
 }
 
 function resolveDisplayName(session) {
-  const storedName = String(session?.fullName || "").trim();
+  const storedName = String(session?.name || "").trim();
   const tokenName = decodeTokenName(session?.token || "").trim();
   const mappedName = getStoredUserName(session?.mobile || "").trim();
 
@@ -806,8 +817,12 @@ function AnimatedField({
   placeholder,
   value,
   secureTextEntry = false,
+  inputStyle,
+  rightAccessory,
+  editable = true,
   keyboardType = "default",
   autoCapitalize = "none",
+  autoComplete,
   textContentType,
   returnKeyType,
   onSubmitEditing,
@@ -828,15 +843,17 @@ function AnimatedField({
   return (
     <View style={styles.fieldBlock}>
       <Animated.Text style={[styles.fieldLabel, labelStyle]}>{label}</Animated.Text>
-      <Animated.View style={[styles.inputShell, containerStyle]}>
+      <Animated.View style={[styles.inputShell, !editable && styles.inputShellLocked, containerStyle]}>
         <TextInput
           value={value}
           placeholder={placeholder}
           placeholderTextColor="#87A0BF"
-          style={styles.input}
+          style={[styles.input, inputStyle]}
           secureTextEntry={secureTextEntry}
+          editable={editable}
           keyboardType={keyboardType}
           autoCapitalize={autoCapitalize}
+          autoComplete={autoComplete}
           autoCorrect={false}
           textContentType={textContentType}
           returnKeyType={returnKeyType}
@@ -849,74 +866,173 @@ function AnimatedField({
           }}
           onChangeText={onChangeText}
         />
+        {rightAccessory ? <View style={styles.inputAccessory}>{rightAccessory}</View> : null}
       </Animated.View>
     </View>
   );
 }
 
+function MuiAppIcon({ icon: Icon, color = palette.blue800, size = 24, style }) {
+  return (
+    <Icon
+      style={{
+        color,
+        display: "block",
+        flexShrink: 0,
+        fontSize: size,
+        height: size,
+        lineHeight: 1,
+        width: size,
+        ...style
+      }}
+    />
+  );
+}
+
 function TrashIcon() {
+  return <MuiAppIcon icon={DeleteIcon} color={palette.danger} size={20} />;
+}
+
+function EyeIcon({ hidden = false }) {
   return (
-    <View style={styles.trashIcon}>
-      <View style={styles.trashIconHandle} />
-      <View style={styles.trashIconLid} />
-      <View style={styles.trashIconBody}>
-        <View style={styles.trashIconLine} />
-        <View style={styles.trashIconLine} />
-        <View style={styles.trashIconLine} />
+    <MuiAppIcon
+      icon={hidden ? VisibilityOffIcon : VisibilityIcon}
+      color={palette.blue800}
+      size={21}
+    />
+  );
+}
+
+function DownloadIcon({ active = false }) {
+  return <MuiAppIcon icon={FileDownloadIcon} color={active ? palette.blue700 : palette.blue800} size={25} />;
+}
+
+function BrandLogo() {
+  return (
+    <View style={styles.brandBadge}>
+      <View style={styles.brandMark}>
+        <MuiAppIcon icon={HomeIcon} color="#F7FBFF" size={25} />
       </View>
     </View>
   );
 }
 
-function EyeIcon() {
-  return (
-    <View style={styles.eyeIcon}>
-      <View style={styles.eyeIconOutline}>
-        <View style={styles.eyeIconPupil} />
-      </View>
-    </View>
-  );
+function LogoutIcon() {
+  return <MuiAppIcon icon={MuiLogoutIcon} color="#F7FBFF" size={25} />;
 }
 
-function DownloadIcon() {
-  return (
-    <View style={styles.downloadIcon}>
-      <View style={styles.downloadIconArrowStem} />
-      <View style={[styles.downloadIconArrowHeadStroke, styles.downloadIconArrowHeadLeft]} />
-      <View style={[styles.downloadIconArrowHeadStroke, styles.downloadIconArrowHeadRight]} />
-      <View style={styles.downloadIconTray} />
-    </View>
-  );
+function PencilEditIcon() {
+  return <MuiAppIcon icon={EditIcon} color={palette.blue700} size={23} />;
 }
 
 function ChevronIcon({ expanded = false }) {
   return (
-    <View style={[styles.chevronIcon, expanded && styles.chevronIconExpanded]}>
-      <View style={[styles.chevronIconStroke, styles.chevronIconStrokeLeft]} />
-      <View style={[styles.chevronIconStroke, styles.chevronIconStrokeRight]} />
-    </View>
+    <MuiAppIcon
+      icon={ExpandMoreIcon}
+      color={palette.blue800}
+      size={22}
+      style={{ transform: expanded ? "rotate(180deg)" : "rotate(0deg)" }}
+    />
   );
 }
 
-function TopTabs({ activeTab, onChange }) {
+function AttendanceTabIcon({ active = false }) {
+  return <MuiAppIcon icon={CalendarMonthIcon} color={active ? palette.blue700 : palette.blue800} size={25} />;
+}
+
+function ManageTabIcon({ active = false }) {
+  return <MuiAppIcon icon={GroupsIcon} color={active ? palette.blue700 : palette.blue800} size={26} />;
+}
+
+function BillingTabIcon({ active = false }) {
+  return <MuiAppIcon icon={CurrencyRupeeIcon} color={active ? palette.blue700 : palette.blue800} size={25} />;
+}
+
+function AddWorkerIcon() {
+  return <MuiAppIcon icon={PersonAddAlt1Icon} color={palette.blue800} size={31} />;
+}
+
+function RupeeIcon() {
+  return <MuiAppIcon icon={CurrencyRupeeIcon} color={palette.blue800} size={21} />;
+}
+
+function CheckActionIcon() {
+  return <MuiAppIcon icon={CheckCircleIcon} color={palette.blue800} size={30} />;
+}
+
+function CloseChipIcon() {
+  return <MuiAppIcon icon={CloseIcon} color={palette.blue800} size={17} />;
+}
+
+function CalendarPreviousIcon() {
+  return <MuiAppIcon icon={ChevronLeftIcon} color={palette.blue800} size={22} />;
+}
+
+function CalendarNextIcon() {
+  return <MuiAppIcon icon={ChevronRightIcon} color={palette.blue800} size={22} />;
+}
+
+function AttendanceStatusIcon({ status, active = false }) {
+  return (
+    <MuiAppIcon
+      icon={status === "present" ? CheckIcon : CloseIcon}
+      color={active ? "#FFFFFF" : palette.textMuted}
+      size={24}
+    />
+  );
+}
+
+function ExpenseActionIcon({ action }) {
+  return <MuiAppIcon icon={action === "add" ? AddIcon : RemoveIcon} color={palette.blue800} size={22} />;
+}
+
+function BottomTabs({ activeTab, onChange }) {
   const tabs = [
     { key: "attendance", label: "Attendance" },
     { key: "manage", label: "Manage" },
     { key: "billing", label: "Billing" },
-    { key: "generated-bills", label: "Generated\nBills" }
+    { key: "generated-bills", label: "Bills" }
   ];
 
   return (
-    <View style={styles.topTabs}>
-      {tabs.map((tab) => (
-        <Pressable key={tab.key} style={styles.topTabPressable} onPress={() => onChange(tab.key)}>
-          <View style={[styles.topTab, activeTab === tab.key && styles.topTabActive]}>
-            <Text style={[styles.topTabText, activeTab === tab.key && styles.topTabTextActive]}>
+    <View style={styles.bottomTabs}>
+      {tabs.map((tab) => {
+        const active = activeTab === tab.key;
+
+        return (
+          <Pressable
+            key={tab.key}
+            style={({ hovered, pressed }) => [
+              styles.bottomTabPressable,
+              hovered && styles.bottomTabPressableHover,
+              pressed && styles.bottomTabPressablePressed
+            ]}
+            onPress={() => onChange(tab.key)}
+          >
+          <View style={[styles.bottomTab, active && styles.bottomTabActive]}>
+            <View style={styles.bottomTabIconSlot}>
+              {tab.key === "attendance" ? (
+                <AttendanceTabIcon active={active} />
+              ) : tab.key === "manage" ? (
+                <ManageTabIcon active={active} />
+              ) : tab.key === "billing" ? (
+                <BillingTabIcon active={active} />
+              ) : tab.key === "generated-bills" ? (
+                <DownloadIcon active={active} />
+              ) : (
+                <View style={[styles.bottomTabDot, active && styles.bottomTabDotActive]} />
+              )}
+            </View>
+            <Text
+              style={[styles.bottomTabText, active && styles.bottomTabTextActive]}
+              numberOfLines={1}
+            >
               {tab.label}
             </Text>
           </View>
         </Pressable>
-      ))}
+        );
+      })}
     </View>
   );
 }
@@ -942,6 +1058,7 @@ function AttendanceHome({ displayName, token, onLogout }) {
   const [extraExpensesByMonth, setExtraExpensesByMonth] = useState({});
   const [workerName, setWorkerName] = useState("");
   const [workerWage, setWorkerWage] = useState("");
+  const [isWorkerWageFocused, setIsWorkerWageFocused] = useState(false);
   const [showAddWorkerForm, setShowAddWorkerForm] = useState(false);
   const [editingWorker, setEditingWorker] = useState(null);
   const [errorMessage, setErrorMessage] = useState("");
@@ -957,8 +1074,10 @@ function AttendanceHome({ displayName, token, onLogout }) {
   const [selectedGeneratedBill, setSelectedGeneratedBill] = useState(null);
   const [loadingGeneratedBills, setLoadingGeneratedBills] = useState(false);
   const [loadingGeneratedBillAction, setLoadingGeneratedBillAction] = useState("");
+  const [deletingGeneratedBills, setDeletingGeneratedBills] = useState(false);
   const [expandedGeneratedMonth, setExpandedGeneratedMonth] = useState("");
   const [generatedMonthDeleteTarget, setGeneratedMonthDeleteTarget] = useState(null);
+  const [generatedBillDeleteTarget, setGeneratedBillDeleteTarget] = useState(null);
   const expenseRowSequence = useRef(1);
   const [todayKey, setTodayKey] = useState(() => formatDateKey(new Date()));
 
@@ -1057,13 +1176,17 @@ function AttendanceHome({ displayName, token, onLogout }) {
   }
 
   function cacheGeneratedBill(bill) {
+    const billKey = getGeneratedBillKey(bill);
+
     setGeneratedBillCache((current) => ({
       ...current,
-      [bill.dateKey]: bill
+      [billKey]: bill
     }));
   }
 
   function upsertGeneratedBill(bill) {
+    const billKey = getGeneratedBillKey(bill);
+
     cacheGeneratedBill(bill);
 
     setGeneratedBillsByMonth((current) => {
@@ -1072,9 +1195,14 @@ function AttendanceHome({ displayName, token, onLogout }) {
         ? {
             ...current[monthKey],
             bills: current[monthKey].bills
-              .filter((item) => item.dateKey !== bill.dateKey)
+              .filter((item) => getGeneratedBillKey(item) !== billKey)
               .concat(bill)
-              .sort((left, right) => right.dateKey.localeCompare(left.dateKey))
+              .sort(
+                (left, right) =>
+                  right.dateKey.localeCompare(left.dateKey) ||
+                  (right.id || "").localeCompare(left.id || "") ||
+                  (right.rangeDisplayDate || "").localeCompare(left.rangeDisplayDate || "")
+              )
           }
         : {
             monthKey,
@@ -1091,9 +1219,42 @@ function AttendanceHome({ displayName, token, onLogout }) {
     setExpandedGeneratedMonth(bill.monthKey);
   }
 
-  async function getGeneratedBillForDate(dateKey) {
-    if (generatedBillCache[dateKey]) {
-      const cachedBill = generatedBillCache[dateKey];
+  function removeGeneratedBillFromState(bill) {
+    const billKey = getGeneratedBillKey(bill);
+
+    setGeneratedBillCache((current) => {
+      const nextCache = { ...current };
+      delete nextCache[billKey];
+      return nextCache;
+    });
+
+    setGeneratedBillsByMonth((current) => {
+      const monthKey = bill.monthKey;
+      const month = current[monthKey];
+
+      if (!month) {
+        return current;
+      }
+
+      const nextBills = month.bills.filter((item) => getGeneratedBillKey(item) !== billKey);
+      const nextMonths = { ...current };
+
+      if (nextBills.length > 0) {
+        nextMonths[monthKey] = {
+          ...month,
+          bills: nextBills
+        };
+      } else {
+        delete nextMonths[monthKey];
+      }
+
+      return nextMonths;
+    });
+  }
+
+  async function getGeneratedBillForKey(billKey) {
+    if (generatedBillCache[billKey]) {
+      const cachedBill = generatedBillCache[billKey];
 
       if (cachedBill.id) {
         const billResult = await getBillById(cachedBill.id, token);
@@ -1109,7 +1270,7 @@ function AttendanceHome({ displayName, token, onLogout }) {
     const existingBills = Array.isArray(existingBillsResult?.bills) ? existingBillsResult.bills : [];
     const storedBill = existingBills
       .map((item) => normalizeStoredBillPayload(item))
-      .filter((item) => item.dateKey === dateKey)
+      .filter((item) => getGeneratedBillKey(item) === billKey)
       .sort((left, right) => (right.id || "").localeCompare(left.id || ""))[0];
     let bill = storedBill;
 
@@ -1136,7 +1297,6 @@ function AttendanceHome({ displayName, token, onLogout }) {
       const nextGeneratedBillCache = {};
       const result = await getBills(token);
       const storedBills = Array.isArray(result?.bills) ? result.bills : [];
-      const uniqueBills = new Map();
 
       storedBills
         .map((bill) => normalizeStoredBillPayload(bill))
@@ -1146,27 +1306,28 @@ function AttendanceHome({ displayName, token, onLogout }) {
             right.dateKey.localeCompare(left.dateKey) || (right.id || "").localeCompare(left.id || "")
         )
         .forEach((bill) => {
-          if (!uniqueBills.has(bill.dateKey)) {
-            uniqueBills.set(bill.dateKey, bill);
+          const monthKey = bill.monthKey;
+          const billKey = getGeneratedBillKey(bill);
+
+          if (!nextGeneratedBills[monthKey]) {
+            nextGeneratedBills[monthKey] = {
+              monthKey,
+              label: formatMonthHeading(monthKey),
+              bills: []
+            };
           }
+
+          nextGeneratedBills[monthKey].bills.push(bill);
+          nextGeneratedBillCache[billKey] = bill;
         });
 
-      Array.from(uniqueBills.values()).forEach((bill) => {
-        const monthKey = bill.monthKey;
-        if (!nextGeneratedBills[monthKey]) {
-          nextGeneratedBills[monthKey] = {
-            monthKey,
-            label: formatMonthHeading(monthKey),
-            bills: []
-          };
-        }
-
-        nextGeneratedBills[monthKey].bills.push(bill);
-        nextGeneratedBillCache[bill.dateKey] = bill;
-      });
-
       Object.values(nextGeneratedBills).forEach((month) => {
-        month.bills.sort((left, right) => right.dateKey.localeCompare(left.dateKey));
+        month.bills.sort(
+          (left, right) =>
+            right.dateKey.localeCompare(left.dateKey) ||
+            (right.id || "").localeCompare(left.id || "") ||
+            (right.rangeDisplayDate || "").localeCompare(left.rangeDisplayDate || "")
+        );
       });
 
       setGeneratedBillsByMonth(nextGeneratedBills);
@@ -1235,12 +1396,12 @@ function AttendanceHome({ displayName, token, onLogout }) {
     throw new Error("Image download is available in the browser build for now.");
   }
 
-  async function handleViewGeneratedBill(dateKey) {
-    setLoadingGeneratedBillAction(`view-${dateKey}`);
+  async function handleViewGeneratedBill(billKey) {
+    setLoadingGeneratedBillAction(`view-${billKey}`);
     setErrorMessage("");
 
     try {
-      const bill = await getGeneratedBillForDate(dateKey);
+      const bill = await getGeneratedBillForKey(billKey);
       setSelectedGeneratedBill(bill);
     } catch (error) {
       setErrorMessage(error.message || "Failed to open generated bill.");
@@ -1249,12 +1410,12 @@ function AttendanceHome({ displayName, token, onLogout }) {
     }
   }
 
-  async function handleDownloadGeneratedBill(dateKey) {
-    setLoadingGeneratedBillAction(`download-${dateKey}`);
+  async function handleDownloadGeneratedBill(billKey) {
+    setLoadingGeneratedBillAction(`download-${billKey}`);
     setErrorMessage("");
 
     try {
-      const bill = await getGeneratedBillForDate(dateKey);
+      const bill = await getGeneratedBillForKey(billKey);
       await downloadGeneratedBillFile(bill);
     } catch (error) {
       setErrorMessage(error.message || "Failed to download generated bill.");
@@ -1275,9 +1436,74 @@ function AttendanceHome({ displayName, token, onLogout }) {
     setGeneratedMonthDeleteTarget(null);
   }
 
-  function confirmGeneratedMonthDelete() {
-    setGeneratedMonthDeleteTarget(null);
-    setErrorMessage("Bill deletion is not available yet because the backend does not expose a delete Bills API.");
+  async function confirmGeneratedMonthDelete() {
+    if (!generatedMonthDeleteTarget || deletingGeneratedBills) {
+      return;
+    }
+
+    const billsToDelete = generatedMonthDeleteTarget.bills.filter((bill) => bill.id);
+
+    if (billsToDelete.length === 0) {
+      setGeneratedMonthDeleteTarget(null);
+      setErrorMessage("These bills do not have backend IDs yet, so they cannot be deleted.");
+      return;
+    }
+
+    setDeletingGeneratedBills(true);
+    setLoadingGeneratedBillAction(`delete-month-${generatedMonthDeleteTarget.monthKey}`);
+    setErrorMessage("");
+
+    try {
+      await Promise.all(billsToDelete.map((bill) => deleteBill(bill.id, token)));
+      billsToDelete.forEach(removeGeneratedBillFromState);
+      setGeneratedMonthDeleteTarget(null);
+      setSelectedGeneratedBill((current) =>
+        current && billsToDelete.some((bill) => bill.id === current.id) ? null : current
+      );
+    } catch (error) {
+      setErrorMessage(error.message || "Failed to delete generated bills.");
+    } finally {
+      setDeletingGeneratedBills(false);
+      setLoadingGeneratedBillAction("");
+    }
+  }
+
+  function requestGeneratedBillDelete(bill) {
+    setGeneratedBillDeleteTarget(bill);
+  }
+
+  function cancelGeneratedBillDelete() {
+    setGeneratedBillDeleteTarget(null);
+  }
+
+  async function confirmGeneratedBillDelete() {
+    if (!generatedBillDeleteTarget || deletingGeneratedBills) {
+      return;
+    }
+
+    if (!generatedBillDeleteTarget.id) {
+      setGeneratedBillDeleteTarget(null);
+      setErrorMessage("This bill does not have a backend ID yet, so it cannot be deleted.");
+      return;
+    }
+
+    const billToDelete = generatedBillDeleteTarget;
+
+    setDeletingGeneratedBills(true);
+    setLoadingGeneratedBillAction(`delete-${getGeneratedBillKey(billToDelete)}`);
+    setErrorMessage("");
+
+    try {
+      await deleteBill(billToDelete.id, token);
+      removeGeneratedBillFromState(billToDelete);
+      setGeneratedBillDeleteTarget(null);
+      setSelectedGeneratedBill((current) => (current?.id === billToDelete.id ? null : current));
+    } catch (error) {
+      setErrorMessage(error.message || "Failed to delete generated bill.");
+    } finally {
+      setDeletingGeneratedBills(false);
+      setLoadingGeneratedBillAction("");
+    }
   }
 
   async function saveBillToBackend(savedBill) {
@@ -1285,11 +1511,7 @@ function AttendanceHome({ displayName, token, onLogout }) {
       {
         generatedBillData: createStoredBillPayload(savedBill),
         name:
-          savedBill.fromDateKey &&
-          savedBill.toDateKey &&
-          savedBill.fromDateKey !== savedBill.toDateKey
-            ? `Bill ${formatDisplayDate(savedBill.fromDateKey)} to ${formatDisplayDate(savedBill.toDateKey)}`
-            : `Bill ${savedBill.displayDate}`,
+          `Bill ${savedBill.displayDate}`,
         date: savedBill.dateKey
       },
       token
@@ -1308,8 +1530,13 @@ function AttendanceHome({ displayName, token, onLogout }) {
       return;
     }
 
+    if (!billingFromDate || !billingToDate) {
+      setErrorMessage("Select both From and To dates before generating a bill.");
+      return;
+    }
+
     if (displayBillingRows.length === 0) {
-      setErrorMessage("No billing rows are available to save.");
+      setErrorMessage("No billing rows are available to generate.");
       return;
     }
 
@@ -1325,15 +1552,16 @@ function AttendanceHome({ displayName, token, onLogout }) {
         }))
         .filter((item) => item.reason || item.amount > 0);
 
-      const fromDateKey = hasBillingFilter ? billingFromDate : todayKey;
-      const toDateKey = hasBillingFilter ? billingToDate : todayKey;
-      const billDateKey = toDateKey || todayKey;
+      const fromDateKey = billingFromDate;
+      const toDateKey = billingToDate;
+      const billDateKey = todayKey;
       const savedBill = {
         dateKey: billDateKey,
-        displayDate:
-          fromDateKey && toDateKey && fromDateKey !== toDateKey
+        displayDate: formatDisplayDate(billDateKey),
+        rangeDisplayDate:
+          fromDateKey !== toDateKey
             ? `${formatDisplayDate(fromDateKey)} to ${formatDisplayDate(toDateKey)}`
-            : formatDisplayDate(billDateKey),
+            : formatDisplayDate(fromDateKey),
         monthKey: getMonthKey(billDateKey),
         fromDateKey,
         toDateKey,
@@ -1483,13 +1711,11 @@ function AttendanceHome({ displayName, token, onLogout }) {
         "Attendance save summary:",
         saveResponses.map((item) => item?.message).filter(Boolean)
       );
-      const refreshedWorkers = extractAttendanceList(await getAttendanceByDate(selectedDate, token));
       await loadAttendance(selectedDate);
-      await saveBillToBackend(createGeneratedBill(selectedDate, refreshedWorkers));
       if (hasBillingFilter && selectedDate >= billingFromDate && selectedDate <= billingToDate) {
         await loadBillingSummary(billingFromDate, billingToDate);
       } else if (!hasBillingFilter && activeTab === "billing") {
-        await loadCurrentBillingRows();
+        setBillingRows([]);
       }
 
       if (activeTab === "generated-bills") {
@@ -1527,7 +1753,7 @@ function AttendanceHome({ displayName, token, onLogout }) {
         if (hasBillingFilter) {
           await loadBillingSummary(billingFromDate, billingToDate);
         } else {
-          await loadCurrentBillingRows();
+          setBillingRows([]);
         }
       }
     } catch (error) {
@@ -1561,7 +1787,7 @@ function AttendanceHome({ displayName, token, onLogout }) {
         if (hasBillingFilter) {
           await loadBillingSummary(billingFromDate, billingToDate);
         } else {
-          await loadCurrentBillingRows();
+          setBillingRows([]);
         }
       }
     } catch (error) {
@@ -1655,31 +1881,6 @@ function AttendanceHome({ displayName, token, onLogout }) {
     }
   }
 
-  async function loadCurrentBillingRows() {
-    setLoadingBilling(true);
-    setErrorMessage("");
-
-    try {
-      const data = extractAttendanceList(await getAttendanceByDate(todayKey, token));
-      const nextRows = data
-        .map((worker) => ({
-          id: worker._id,
-          name: worker.name,
-          wage: Number(worker.wage) || 0,
-          totalDays: worker.attendanceStatus === "present" ? 1 : 0,
-          totalWage: (worker.attendanceStatus === "present" ? 1 : 0) * (Number(worker.wage) || 0)
-        }))
-        .sort((left, right) => left.name.localeCompare(right.name));
-
-      setBillingRows(nextRows);
-    } catch (error) {
-      setBillingRows([]);
-      setErrorMessage(error.message || "Failed to load current date billing.");
-    } finally {
-      setLoadingBilling(false);
-    }
-  }
-
   useEffect(() => {
     const syncTodayKey = () => {
       setTodayKey(formatDateKey(new Date()));
@@ -1709,7 +1910,7 @@ function AttendanceHome({ displayName, token, onLogout }) {
       if (hasBillingFilter) {
         void loadBillingSummary(billingFromDate, billingToDate);
       } else {
-        void loadCurrentBillingRows();
+        setBillingRows([]);
       }
     }
   }, [activeTab, billingFromDate, billingToDate, todayKey]);
@@ -1825,23 +2026,26 @@ function AttendanceHome({ displayName, token, onLogout }) {
         <Animated.View entering={FadeInUp.duration(450)} style={styles.shell}>
           <View style={styles.headerTop}>
             <View style={styles.brandRow}>
-              <View style={styles.brandBadge}>
-                <Text style={styles.brandBadgeText}>EM</Text>
-              </View>
+              <BrandLogo />
               <View style={styles.brandCopy}>
                 <Text style={styles.brandEyebrow}>Employee Management</Text>
                 <Text style={styles.brandTitle}>{displayName}</Text>
               </View>
             </View>
 
-            <Pressable onPress={onLogout}>
-              <View style={styles.logoutChip}>
-                <Text style={styles.logoutChipText}>Logout</Text>
-              </View>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Logout"
+              onPress={onLogout}
+              style={({ hovered, pressed }) => [
+                styles.logoutButton,
+                hovered && styles.logoutButtonHover,
+                pressed && styles.logoutButtonPressed
+              ]}
+            >
+              <LogoutIcon />
             </Pressable>
           </View>
-
-          <TopTabs activeTab={activeTab} onChange={setActiveTab} />
 
           <View style={styles.card}>
             <View style={styles.sectionHeader}>
@@ -1879,7 +2083,7 @@ function AttendanceHome({ displayName, token, onLogout }) {
                       }
                     >
                       <View style={styles.calendarNavButton}>
-                        <Text style={styles.calendarNavText}>{"<"}</Text>
+                        <CalendarPreviousIcon />
                       </View>
                     </Pressable>
 
@@ -1895,7 +2099,7 @@ function AttendanceHome({ displayName, token, onLogout }) {
                       }
                     >
                       <View style={styles.calendarNavButton}>
-                        <Text style={styles.calendarNavText}>{">"}</Text>
+                        <CalendarNextIcon />
                       </View>
                     </Pressable>
                   </View>
@@ -1982,14 +2186,10 @@ function AttendanceHome({ displayName, token, onLogout }) {
                                 draftStatus === "present" && styles.symbolButtonPresent
                               ]}
                             >
-                              <Text
-                                style={[
-                                  styles.symbolText,
-                                  draftStatus === "present" && styles.symbolTextActive
-                                ]}
-                              >
-                                ✓
-                              </Text>
+                              <AttendanceStatusIcon
+                                status="present"
+                                active={draftStatus === "present"}
+                              />
                             </View>
                           </Pressable>
 
@@ -2001,14 +2201,10 @@ function AttendanceHome({ displayName, token, onLogout }) {
                                 draftStatus === "absent" && styles.symbolButtonAbsent
                               ]}
                             >
-                              <Text
-                                style={[
-                                  styles.symbolText,
-                                  draftStatus === "absent" && styles.symbolTextActive
-                                ]}
-                              >
-                                ✕
-                              </Text>
+                              <AttendanceStatusIcon
+                                status="absent"
+                                active={draftStatus === "absent"}
+                              />
                             </View>
                           </Pressable>
                         </View>
@@ -2054,6 +2250,11 @@ function AttendanceHome({ displayName, token, onLogout }) {
                   <View style={styles.workerHeaderActions}>
                     {loadingList ? <ActivityIndicator color={palette.blue700} /> : null}
                     <Pressable
+                      style={({ hovered, pressed }) => [
+                        styles.addChipPressable,
+                        hovered && styles.addChipPressableHover,
+                        pressed && styles.addChipPressablePressed
+                      ]}
                       onPress={() => {
                         if (showAddWorkerForm && !editingWorker) {
                           resetWorkerForm();
@@ -2064,9 +2265,14 @@ function AttendanceHome({ displayName, token, onLogout }) {
                       }}
                     >
                       <View style={styles.addChip}>
-                        <Text style={styles.addChipText}>
-                          {showAddWorkerForm && !editingWorker ? "Close" : "+ Add"}
-                        </Text>
+                        {showAddWorkerForm && !editingWorker ? (
+                          <View style={styles.closeChipContent}>
+                            <CloseChipIcon />
+                            <Text style={styles.addChipText}>Close</Text>
+                          </View>
+                        ) : (
+                          <AddWorkerIcon />
+                        )}
                       </View>
                     </Pressable>
                   </View>
@@ -2090,19 +2296,47 @@ function AttendanceHome({ displayName, token, onLogout }) {
                       </View>
                       <View style={styles.compactField}>
                         <Text style={styles.compactLabel}>Wage</Text>
-                        <TextInput
-                          value={workerWage}
-                          onChangeText={setWorkerWage}
-                          placeholder="500"
-                          placeholderTextColor="#87A0BF"
-                          style={styles.compactInput}
-                          keyboardType="numeric"
-                        />
+                        <View
+                          style={[
+                            styles.compactInputShell,
+                            isWorkerWageFocused && styles.compactInputShellFocused
+                          ]}
+                        >
+                          <TextInput
+                            value={workerWage}
+                            onChangeText={setWorkerWage}
+                            onFocus={() => setIsWorkerWageFocused(true)}
+                            onBlur={() => setIsWorkerWageFocused(false)}
+                            placeholder="500"
+                            placeholderTextColor="#87A0BF"
+                            style={[
+                              styles.compactInput,
+                              styles.compactInputWithIcon,
+                              isWorkerWageFocused && styles.compactInputFocused
+                            ]}
+                            keyboardType="numeric"
+                          />
+                          <View
+                            style={[
+                              styles.compactInputIcon,
+                              isWorkerWageFocused && styles.compactInputIconFocused
+                            ]}
+                          >
+                            <RupeeIcon />
+                          </View>
+                        </View>
                       </View>
                     </View>
                     <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={editingWorker ? "Update worker" : "Save worker"}
                       disabled={!workerName.trim() || !workerWage.trim() || addingWorker}
                       onPress={handleWorkerSubmit}
+                      style={({ hovered, pressed }) => [
+                        styles.workerSubmitPressable,
+                        hovered && !addingWorker && styles.workerSubmitPressableHover,
+                        pressed && !addingWorker && styles.workerSubmitPressablePressed
+                      ]}
                     >
                       <View
                         style={[
@@ -2110,13 +2344,11 @@ function AttendanceHome({ displayName, token, onLogout }) {
                           (!workerName.trim() || !workerWage.trim() || addingWorker) && styles.disabledButton
                         ]}
                       >
-                        <Text style={styles.secondaryButtonText}>
-                          {editingWorker
-                            ? "Update worker"
-                            : addingWorker
-                              ? "Adding..."
-                              : "Save worker"}
-                        </Text>
+                        {addingWorker ? (
+                          <ActivityIndicator color={palette.blue800} />
+                        ) : (
+                          <CheckActionIcon />
+                        )}
                       </View>
                     </Pressable>
                   </View>
@@ -2138,10 +2370,17 @@ function AttendanceHome({ displayName, token, onLogout }) {
                         <Text style={styles.workerName}>{worker.name}</Text>
                         <Text style={styles.workerWage}>Daily wage: {worker.wage}</Text>
                       </View>
-                      <Pressable onPress={() => openEditWorkerForm(worker)}>
-                        <View style={styles.manageBadge}>
-                          <Text style={styles.manageBadgeText}>Edit</Text>
-                        </View>
+                      <Pressable
+                        accessibilityLabel={`Edit ${worker.name}`}
+                        title="Edit"
+                        onPress={() => openEditWorkerForm(worker)}
+                        style={({ hovered, pressed }) => [
+                          styles.workerEditButton,
+                          hovered && styles.workerEditButtonHover,
+                          pressed && styles.workerEditButtonPressed
+                        ]}
+                      >
+                        <PencilEditIcon />
                       </Pressable>
                     </View>
                   </View>
@@ -2161,7 +2400,7 @@ function AttendanceHome({ displayName, token, onLogout }) {
               <View style={styles.billingCard}>
                 <View style={styles.billingHeader}>
                   <View>
-                    <Text style={styles.billingTodayLabel}>Current date</Text>
+                    <Text style={styles.billingTodayLabel}>Generated date</Text>
                     <Text style={styles.billingTitle}>{formatDisplayDate(todayKey)}</Text>
                   </View>
                 </View>
@@ -2208,7 +2447,7 @@ function AttendanceHome({ displayName, token, onLogout }) {
                         }
                       >
                         <View style={styles.calendarNavButton}>
-                          <Text style={styles.calendarNavText}>{"<"}</Text>
+                          <CalendarPreviousIcon />
                         </View>
                       </Pressable>
 
@@ -2224,7 +2463,7 @@ function AttendanceHome({ displayName, token, onLogout }) {
                         }
                       >
                         <View style={styles.calendarNavButton}>
-                          <Text style={styles.calendarNavText}>{">"}</Text>
+                          <CalendarNextIcon />
                         </View>
                       </Pressable>
                     </View>
@@ -2289,12 +2528,18 @@ function AttendanceHome({ displayName, token, onLogout }) {
                 <View style={styles.billingActionRow}>
                   <Text style={styles.billingActionLabel}>Monthly wage table</Text>
                   <View style={styles.billingActionButtons}>
-                    <Pressable onPress={() => setBillingEditMode((current) => !current)}>
-                      <View style={styles.manageBadge}>
-                        <Text style={styles.manageBadgeText}>
-                          {billingEditMode ? "Done" : "Edit"}
-                        </Text>
-                      </View>
+                    <Pressable
+                      accessibilityLabel={billingEditMode ? "Finish editing billing" : "Edit billing"}
+                      title={billingEditMode ? "Done" : "Edit"}
+                      onPress={() => setBillingEditMode((current) => !current)}
+                      style={({ hovered, pressed }) => [
+                        styles.workerEditButton,
+                        billingEditMode && styles.billingEditButtonActive,
+                        hovered && styles.workerEditButtonHover,
+                        pressed && styles.workerEditButtonPressed
+                      ]}
+                    >
+                      <PencilEditIcon />
                     </Pressable>
                   </View>
                 </View>
@@ -2314,7 +2559,11 @@ function AttendanceHome({ displayName, token, onLogout }) {
                     </View>
                   ) : displayBillingRows.length === 0 ? (
                     <View style={styles.billingState}>
-                      <Text style={styles.billingStateText}>No billing data for this month yet.</Text>
+                      <Text style={styles.billingStateText}>
+                        {hasBillingFilter
+                          ? "No billing data for this date range yet."
+                          : "Select From and To dates to generate a bill."}
+                      </Text>
                     </View>
                   ) : (
                     displayBillingRows.map((worker) => (
@@ -2405,21 +2654,14 @@ function AttendanceHome({ displayName, token, onLogout }) {
                   <View style={styles.expenseHeader}>
                     <Text style={styles.expenseTitle}>Other expenses</Text>
                     <View style={styles.billingActionButtons}>
-                      <Pressable onPress={() => void handleSaveBillingToBackend()}>
-                        <View style={styles.manageBadge}>
-                          <Text style={styles.manageBadgeText}>
-                            {savingBillingToBackend ? "Saving..." : "Update Bill"}
-                          </Text>
-                        </View>
-                      </Pressable>
                       <Pressable onPress={addExpenseRow}>
                         <View style={styles.manageBadge}>
-                          <Text style={styles.expenseActionText}>+</Text>
+                          <ExpenseActionIcon action="add" />
                         </View>
                       </Pressable>
                       <Pressable onPress={removeExpenseRow}>
                         <View style={styles.manageBadge}>
-                          <Text style={styles.expenseActionText}>-</Text>
+                          <ExpenseActionIcon action="remove" />
                         </View>
                       </Pressable>
                     </View>
@@ -2451,8 +2693,24 @@ function AttendanceHome({ displayName, token, onLogout }) {
                     </View>
                   ))}
                   <View style={styles.expenseFooter}>
-                    <Text style={styles.expenseFooterLabel}>Other expenses total</Text>
-                    <Text style={styles.expenseFooterAmount}>{extraExpensesTotal}</Text>
+                    <View style={styles.expenseTotalBlock}>
+                      <Text style={styles.expenseFooterLabel}>Other expenses total</Text>
+                      <Text style={styles.expenseFooterAmount}>{extraExpensesTotal}</Text>
+                    </View>
+                    <Pressable
+                      disabled={savingBillingToBackend}
+                      onPress={() => void handleSaveBillingToBackend()}
+                      style={({ hovered, pressed }) => [
+                        styles.updateBillButton,
+                        hovered && !savingBillingToBackend && styles.updateBillButtonHover,
+                        pressed && !savingBillingToBackend && styles.updateBillButtonPressed,
+                        savingBillingToBackend && styles.disabledButton
+                      ]}
+                    >
+                      <Text style={styles.updateBillButtonText}>
+                        {savingBillingToBackend ? "Generating..." : "Generate Bill"}
+                      </Text>
+                    </Pressable>
                   </View>
                 </View>
 
@@ -2514,15 +2772,18 @@ function AttendanceHome({ displayName, token, onLogout }) {
 
                       {expandedGeneratedMonth === month.monthKey
                         ? month.bills.map((bill) => {
-                        const isViewing = loadingGeneratedBillAction === `view-${bill.dateKey}`;
-                        const isDownloading =
-                          loadingGeneratedBillAction === `download-${bill.dateKey}`;
+                        const billKey = getGeneratedBillKey(bill);
+                        const isViewing = loadingGeneratedBillAction === `view-${billKey}`;
+                        const isDeleting = loadingGeneratedBillAction === `delete-${billKey}`;
 
                         return (
-                          <View key={bill.dateKey} style={styles.generatedBillRow}>
+                          <View key={billKey} style={styles.generatedBillRow}>
                             <View style={styles.generatedBillInfo}>
                               <Text style={styles.generatedBillDate}>{bill.displayDate}</Text>
                               <Text style={styles.generatedBillMeta}>
+                                {bill.rangeDisplayDate && bill.rangeDisplayDate !== bill.displayDate
+                                  ? `Range: ${bill.rangeDisplayDate} | `
+                                  : ""}
                                 Workers: {bill.rows.length} | Total: {bill.totalAmount}
                               </Text>
                             </View>
@@ -2530,39 +2791,38 @@ function AttendanceHome({ displayName, token, onLogout }) {
                             <View style={styles.generatedBillActions}>
                               <Pressable
                                 accessibilityRole="button"
+                                accessibilityLabel={`Delete generated bill for ${bill.displayDate}`}
+                                disabled={isDeleting || deletingGeneratedBills}
+                                onPress={() => requestGeneratedBillDelete(bill)}
+                                style={({ hovered, pressed }) => [
+                                  styles.generatedBillDeletePressable,
+                                  hovered && styles.generatedBillDeletePressableHover,
+                                  pressed && styles.generatedBillDeletePressablePressed
+                                ]}
+                              >
+                                {isDeleting ? (
+                                  <ActivityIndicator color={palette.danger} size="small" />
+                                ) : (
+                                  <TrashIcon />
+                                )}
+                              </Pressable>
+
+                              <Pressable
+                                accessibilityRole="button"
                                 accessibilityLabel="View generated bill"
-                                disabled={isViewing || isDownloading}
-                                onPress={() => handleViewGeneratedBill(bill.dateKey)}
+                                disabled={isViewing}
+                                onPress={() => handleViewGeneratedBill(billKey)}
                                 style={({ hovered, pressed }) => [
                                   styles.generatedBillActionPressable,
                                   hovered && styles.generatedBillActionPressableHover,
                                   pressed && styles.generatedBillActionPressablePressed,
-                                  (isViewing || isDownloading) && styles.generatedBillActionChipBusy
+                                  isViewing && styles.generatedBillActionChipBusy
                                 ]}
                               >
                                 {isViewing ? (
                                   <ActivityIndicator color={palette.blue800} size="small" />
                                 ) : (
                                   <EyeIcon />
-                                )}
-                              </Pressable>
-
-                              <Pressable
-                                accessibilityRole="button"
-                                accessibilityLabel="Download generated bill"
-                                disabled={isViewing || isDownloading}
-                                onPress={() => handleDownloadGeneratedBill(bill.dateKey)}
-                                style={({ hovered, pressed }) => [
-                                  styles.generatedBillActionPressable,
-                                  hovered && styles.generatedBillActionPressableHover,
-                                  pressed && styles.generatedBillActionPressablePressed,
-                                  (isViewing || isDownloading) && styles.generatedBillActionChipBusy
-                                ]}
-                              >
-                                {isDownloading ? (
-                                  <ActivityIndicator color={palette.blue800} size="small" />
-                                ) : (
-                                  <DownloadIcon />
                                 )}
                               </Pressable>
                             </View>
@@ -2580,6 +2840,10 @@ function AttendanceHome({ displayName, token, onLogout }) {
         </Animated.View>
       </ScrollView>
 
+      <View style={styles.bottomTabsDock}>
+        <BottomTabs activeTab={activeTab} onChange={setActiveTab} />
+      </View>
+
       {selectedGeneratedBill ? (
         <View style={styles.generatedPreviewOverlay}>
           <Pressable style={styles.generatedPreviewBackdrop} onPress={() => setSelectedGeneratedBill(null)} />
@@ -2590,11 +2854,38 @@ function AttendanceHome({ displayName, token, onLogout }) {
                 <Text style={styles.generatedPreviewTitle}>{selectedGeneratedBill.displayDate}</Text>
               </View>
 
-              <Pressable onPress={() => setSelectedGeneratedBill(null)}>
-                <View style={styles.manageBadge}>
-                  <Text style={styles.manageBadgeText}>Close</Text>
-                </View>
-              </Pressable>
+              <View style={styles.generatedPreviewHeaderActions}>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Download generated bill"
+                  disabled={loadingGeneratedBillAction === `download-${getGeneratedBillKey(selectedGeneratedBill)}`}
+                  onPress={() => handleDownloadGeneratedBill(getGeneratedBillKey(selectedGeneratedBill))}
+                  style={({ hovered, pressed }) => [
+                    styles.generatedPreviewActionButton,
+                    hovered && styles.generatedPreviewActionButtonHover,
+                    pressed && styles.generatedPreviewActionButtonPressed,
+                    loadingGeneratedBillAction === `download-${getGeneratedBillKey(selectedGeneratedBill)}` &&
+                      styles.generatedBillActionChipBusy
+                  ]}
+                >
+                  {loadingGeneratedBillAction === `download-${getGeneratedBillKey(selectedGeneratedBill)}` ? (
+                    <ActivityIndicator color={palette.blue800} size="small" />
+                  ) : (
+                    <DownloadIcon />
+                  )}
+                </Pressable>
+
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Close bill preview"
+                  onPress={() => setSelectedGeneratedBill(null)}
+                >
+                  <View style={[styles.manageBadge, styles.generatedPreviewCloseButton]}>
+                    <CloseChipIcon />
+                    <Text style={styles.manageBadgeText}>Close</Text>
+                  </View>
+                </Pressable>
+              </View>
             </View>
 
             <ScrollView style={styles.generatedPreviewScroll} showsVerticalScrollIndicator={false}>
@@ -2677,19 +2968,51 @@ function AttendanceHome({ displayName, token, onLogout }) {
           <View style={styles.generatedConfirmPopup}>
             <Text style={styles.generatedConfirmTitle}>Delete {generatedMonthDeleteTarget.label}?</Text>
             <Text style={styles.generatedConfirmText}>
-              Please confirm before deleting this month. Right now the backend does not provide a delete Bills API, so this action cannot be completed yet.
+              This will permanently delete every saved bill in this month.
             </Text>
 
             <View style={styles.generatedConfirmActions}>
-              <Pressable onPress={cancelGeneratedMonthDelete}>
+              <Pressable disabled={deletingGeneratedBills} onPress={cancelGeneratedMonthDelete}>
                 <View style={styles.generatedConfirmSecondary}>
                   <Text style={styles.generatedConfirmSecondaryText}>Cancel</Text>
                 </View>
               </Pressable>
 
-              <Pressable onPress={confirmGeneratedMonthDelete}>
-                <View style={styles.generatedConfirmPrimary}>
-                  <Text style={styles.generatedConfirmPrimaryText}>Confirm</Text>
+              <Pressable disabled={deletingGeneratedBills} onPress={confirmGeneratedMonthDelete}>
+                <View style={[styles.generatedConfirmPrimary, deletingGeneratedBills && styles.disabledButton]}>
+                  <Text style={styles.generatedConfirmPrimaryText}>
+                    {deletingGeneratedBills ? "Deleting..." : "Confirm"}
+                  </Text>
+                </View>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      ) : null}
+
+      {generatedBillDeleteTarget ? (
+        <View style={styles.generatedPreviewOverlay}>
+          <Pressable style={styles.generatedPreviewBackdrop} onPress={cancelGeneratedBillDelete} />
+          <View style={styles.generatedConfirmPopup}>
+            <Text style={styles.generatedConfirmTitle}>
+              Delete {generatedBillDeleteTarget.displayDate}?
+            </Text>
+            <Text style={styles.generatedConfirmText}>
+              This will permanently delete this saved bill from the backend.
+            </Text>
+
+            <View style={styles.generatedConfirmActions}>
+              <Pressable disabled={deletingGeneratedBills} onPress={cancelGeneratedBillDelete}>
+                <View style={styles.generatedConfirmSecondary}>
+                  <Text style={styles.generatedConfirmSecondaryText}>Cancel</Text>
+                </View>
+              </Pressable>
+
+              <Pressable disabled={deletingGeneratedBills} onPress={confirmGeneratedBillDelete}>
+                <View style={[styles.generatedConfirmPrimary, deletingGeneratedBills && styles.disabledButton]}>
+                  <Text style={styles.generatedConfirmPrimaryText}>
+                    {deletingGeneratedBills ? "Deleting..." : "Confirm"}
+                  </Text>
                 </View>
               </Pressable>
             </View>
@@ -2706,6 +3029,16 @@ export default function LoginScreen() {
   const [mobile, setMobile] = useState("");
   const [password, setPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(true);
+  const [showPassword, setShowPassword] = useState(false);
+  const [isResetOpen, setIsResetOpen] = useState(false);
+  const [resetNewPassword, setResetNewPassword] = useState("");
+  const [resetConfirmPassword, setResetConfirmPassword] = useState("");
+  const [showResetNewPassword, setShowResetNewPassword] = useState(false);
+  const [showResetConfirmPassword, setShowResetConfirmPassword] = useState(false);
+  const [isResettingPassword, setIsResettingPassword] = useState(false);
+  const [resetMessage, setResetMessage] = useState("");
+  const [authNotice, setAuthNotice] = useState("");
+  const [resetFormKey, setResetFormKey] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [session, setSession] = useState(null);
@@ -2713,6 +3046,7 @@ export default function LoginScreen() {
   const cardLift = useSharedValue(0);
   const buttonPress = useSharedValue(0);
   const checkboxPress = useSharedValue(0);
+  const passwordTogglePress = useSharedValue(0);
 
   useEffect(() => {
     const storedSession = readStoredSession();
@@ -2743,6 +3077,13 @@ export default function LoginScreen() {
     return mobile.trim().length > 0 && password.length > 0;
   }, [authMode, fullName, mobile, password]);
 
+  const resetPasswordsMatch =
+    resetNewPassword.length > 0 &&
+    resetConfirmPassword.length > 0 &&
+    resetNewPassword === resetConfirmPassword;
+  const resetPasswordMismatch =
+    resetConfirmPassword.length > 0 && resetNewPassword !== resetConfirmPassword;
+  const isResetReady = mobile.trim().length > 0 && resetPasswordsMatch && !isResettingPassword;
   const cardStyle = useAnimatedStyle(() => ({
     transform: [
       { translateY: interpolate(cardLift.value, [0, 1], [0, -8]) },
@@ -2755,17 +3096,27 @@ export default function LoginScreen() {
     opacity: withTiming(isFormReady && !isSubmitting ? 1 : 0.6, { duration: 160 })
   }));
 
+  const resetButtonStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: interpolate(buttonPress.value, [0, 1], [1, 0.97]) }],
+    opacity: withTiming(isResetReady ? 1 : 0.6, { duration: 160 })
+  }));
+
   const checkboxStyle = useAnimatedStyle(() => ({
     transform: [{ scale: interpolate(checkboxPress.value, [0, 1], [1, 0.92]) }]
   }));
 
+  const passwordToggleStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: interpolate(passwordTogglePress.value, [0, 1], [1, 0.92]) }]
+  }));
+
   async function handleLogin() {
-    if (!isFormReady || isSubmitting) {
+    if (!isFormReady || isSubmitting || isResetOpen) {
       return;
     }
 
     setIsSubmitting(true);
     setErrorMessage("");
+    setAuthNotice("");
     Keyboard.dismiss();
 
     try {
@@ -2811,6 +3162,7 @@ export default function LoginScreen() {
 
     setIsSubmitting(true);
     setErrorMessage("");
+    setAuthNotice("");
     Keyboard.dismiss();
 
     try {
@@ -2843,6 +3195,60 @@ export default function LoginScreen() {
       setErrorMessage(error.message || "Registration failed");
     } finally {
       setIsSubmitting(false);
+    }
+  }
+
+  function handleForgotPassword() {
+    setErrorMessage("");
+    setAuthNotice("");
+    setResetMessage("");
+    setPassword("");
+    setResetNewPassword("");
+    setResetConfirmPassword("");
+    setShowResetNewPassword(false);
+    setShowResetConfirmPassword(false);
+    setResetFormKey((current) => current + 1);
+    setIsResetOpen(true);
+  }
+
+  function closeResetPassword() {
+    setIsResetOpen(false);
+    setResetMessage("");
+    setResetNewPassword("");
+    setResetConfirmPassword("");
+    setShowResetNewPassword(false);
+    setShowResetConfirmPassword(false);
+  }
+
+  async function handleResetPassword() {
+    if (!isResetReady) {
+      return;
+    }
+
+    setIsResettingPassword(true);
+    setResetMessage("");
+    Keyboard.dismiss();
+
+    try {
+      await resetUserPassword({
+        mobile: mobile.trim(),
+        newPassword: resetNewPassword
+      });
+
+      setAuthMode("login");
+      setPassword("");
+      setShowPassword(false);
+      setIsResetOpen(false);
+      setAuthNotice("Password changed successfully. Please sign in with your new password.");
+      setResetMessage("");
+      setResetNewPassword("");
+      setResetConfirmPassword("");
+      setShowResetNewPassword(false);
+      setShowResetConfirmPassword(false);
+    } catch (error) {
+      setResetMessage(error.message || "Unable to reset password right now.");
+    } finally {
+      setIsResettingPassword(false);
     }
   }
 
@@ -2880,9 +3286,7 @@ export default function LoginScreen() {
             style={styles.shell}
           >
             <Animated.View entering={FadeInDown.delay(120).duration(550)} style={styles.brandRow}>
-              <View style={styles.brandBadge}>
-                <Text style={styles.brandBadgeText}>EM</Text>
-              </View>
+              <BrandLogo />
               <View style={styles.brandCopy}>
                 <Text style={styles.brandEyebrow}>Employee Management</Text>
                 <Text style={styles.brandTitle}>
@@ -2917,42 +3321,201 @@ export default function LoginScreen() {
                 placeholder="Enter mobile number"
                 value={mobile}
                 keyboardType="phone-pad"
+                autoComplete="tel"
                 textContentType="telephoneNumber"
                 returnKeyType="next"
-                onChangeText={setMobile}
+                onChangeText={(value) => {
+                  setMobile(value);
+                  setResetMessage("");
+                  setAuthNotice("");
+                }}
                 onSubmitEditing={() => {
                   cardLift.value = withSpring(1, { damping: 16, stiffness: 180 });
                 }}
               />
 
-              <AnimatedField
-                label="Password"
-                placeholder="Enter password"
-                value={password}
-                secureTextEntry
-                textContentType="password"
-                returnKeyType="done"
-                onChangeText={setPassword}
-                onSubmitEditing={authMode === "register" ? handleRegister : handleLogin}
-              />
-
-              {authMode === "login" ? (
-                <Pressable
-                  onPress={() => setRememberMe((current) => !current)}
-                  onPressIn={() => {
-                    checkboxPress.value = withTiming(1, { duration: 90 });
+              {!isResetOpen ? (
+                <AnimatedField
+                  label="Password"
+                  placeholder="Enter password"
+                  value={password}
+                  secureTextEntry={!showPassword}
+                  inputStyle={styles.passwordInput}
+                  autoComplete="current-password"
+                  textContentType="password"
+                  returnKeyType="done"
+                  onChangeText={(value) => {
+                    setPassword(value);
+                    setAuthNotice("");
                   }}
-                  onPressOut={() => {
-                    checkboxPress.value = withTiming(0, { duration: 120 });
-                  }}
-                >
-                  <Animated.View style={[styles.rememberRow, checkboxStyle]}>
-                    <View style={[styles.checkbox, rememberMe && styles.checkboxChecked]}>
-                      {rememberMe ? <View style={styles.checkboxDot} /> : null}
+                  onSubmitEditing={authMode === "register" ? handleRegister : handleLogin}
+                  rightAccessory={
+                    <Pressable
+                      accessibilityLabel={showPassword ? "Hide password" : "View password"}
+                      title={showPassword ? "Hide password" : "View password"}
+                      onPress={() => setShowPassword((current) => !current)}
+                      onPressIn={() => {
+                        passwordTogglePress.value = withTiming(1, { duration: 90 });
+                      }}
+                      onPressOut={() => {
+                        passwordTogglePress.value = withTiming(0, { duration: 120 });
+                      }}
+                      style={({ hovered, pressed }) => [
+                        styles.passwordToggle,
+                        hovered && styles.passwordToggleHover,
+                        pressed && styles.passwordTogglePressed
+                      ]}
+                    >
+                      <Animated.View style={passwordToggleStyle}>
+                        <EyeIcon hidden={!showPassword} />
+                      </Animated.View>
+                    </Pressable>
+                  }
+                />
+              ) : (
+                <Animated.View entering={FadeInDown.duration(260)} style={styles.resetPanel}>
+                  <View style={styles.resetPanelHeader}>
+                    <View>
+                      <Text style={styles.resetPanelTitle}>Reset password</Text>
+                      <Text style={styles.resetPanelText}>Create a new password for this mobile number.</Text>
                     </View>
-                    <Text style={styles.rememberText}>Remember me</Text>
-                  </Animated.View>
-                </Pressable>
+                    <Pressable onPress={closeResetPassword}>
+                      <Text style={styles.resetPanelClose}>Cancel</Text>
+                    </Pressable>
+                  </View>
+
+                  <AnimatedField
+                    key={`reset-new-${resetFormKey}`}
+                    label="New Password"
+                    placeholder="Enter new password"
+                    value={resetNewPassword}
+                    secureTextEntry={!showResetNewPassword}
+                    inputStyle={styles.passwordInput}
+                    autoComplete="new-password"
+                    textContentType="newPassword"
+                    returnKeyType="next"
+                    onChangeText={(value) => {
+                      setResetNewPassword(value);
+                      setResetMessage("");
+                    }}
+                    rightAccessory={
+                      <Pressable
+                        accessibilityLabel={showResetNewPassword ? "Hide new password" : "View new password"}
+                        title={showResetNewPassword ? "Hide password" : "View password"}
+                        onPress={() => setShowResetNewPassword((current) => !current)}
+                        style={({ hovered, pressed }) => [
+                          styles.passwordToggle,
+                          hovered && styles.passwordToggleHover,
+                          pressed && styles.passwordTogglePressed
+                        ]}
+                      >
+                        <EyeIcon hidden={!showResetNewPassword} />
+                      </Pressable>
+                    }
+                  />
+
+                  <AnimatedField
+                    key={`reset-confirm-${resetFormKey}`}
+                    label="Confirm New Password"
+                    placeholder="Re-enter new password"
+                    value={resetConfirmPassword}
+                    secureTextEntry={!showResetConfirmPassword}
+                    inputStyle={styles.passwordInput}
+                    autoComplete="new-password"
+                    textContentType="newPassword"
+                    returnKeyType="done"
+                    onChangeText={(value) => {
+                      setResetConfirmPassword(value);
+                      setResetMessage("");
+                    }}
+                    onSubmitEditing={handleResetPassword}
+                    rightAccessory={
+                      <Pressable
+                        accessibilityLabel={
+                          showResetConfirmPassword ? "Hide confirm password" : "View confirm password"
+                        }
+                        title={showResetConfirmPassword ? "Hide password" : "View password"}
+                        onPress={() => setShowResetConfirmPassword((current) => !current)}
+                        style={({ hovered, pressed }) => [
+                          styles.passwordToggle,
+                          hovered && styles.passwordToggleHover,
+                          pressed && styles.passwordTogglePressed
+                        ]}
+                      >
+                        <EyeIcon hidden={!showResetConfirmPassword} />
+                      </Pressable>
+                    }
+                  />
+
+                  {resetPasswordMismatch ? (
+                    <Text style={styles.resetValidationText}>Passwords do not match.</Text>
+                  ) : null}
+                  {!mobile.trim() ? (
+                    <Text style={styles.resetValidationText}>Enter your mobile number, then open reset again.</Text>
+                  ) : null}
+                  {resetMessage ? <Text style={styles.resetMessageText}>{resetMessage}</Text> : null}
+
+                  <Pressable
+                    disabled={!isResetReady}
+                    onPress={handleResetPassword}
+                    onPressIn={() => {
+                      buttonPress.value = withTiming(1, { duration: 90 });
+                    }}
+                    onPressOut={() => {
+                      buttonPress.value = withTiming(0, { duration: 120 });
+                    }}
+                  >
+                    <Animated.View
+                      style={[
+                        styles.resetButton,
+                        resetButtonStyle,
+                        !isResetReady && styles.disabledButton
+                      ]}
+                    >
+                      <Text style={styles.resetButtonText}>
+                        {isResettingPassword ? "Resetting..." : "Reset Password"}
+                      </Text>
+                    </Animated.View>
+                  </Pressable>
+                </Animated.View>
+              )}
+
+              {authMode === "login" && !isResetOpen ? (
+                <View style={styles.loginOptionsRow}>
+                  <Pressable
+                    onPress={() => setRememberMe((current) => !current)}
+                    onPressIn={() => {
+                      checkboxPress.value = withTiming(1, { duration: 90 });
+                    }}
+                    onPressOut={() => {
+                      checkboxPress.value = withTiming(0, { duration: 120 });
+                    }}
+                  >
+                    <Animated.View style={[styles.rememberRow, checkboxStyle]}>
+                      <View style={[styles.checkbox, rememberMe && styles.checkboxChecked]}>
+                        {rememberMe ? <View style={styles.checkboxDot} /> : null}
+                      </View>
+                      <Text style={styles.rememberText}>Remember me</Text>
+                    </Animated.View>
+                  </Pressable>
+
+                  <Pressable
+                    onPress={handleForgotPassword}
+                    style={({ hovered, pressed }) => [
+                      styles.forgotPasswordLink,
+                      hovered && styles.forgotPasswordLinkHover,
+                      pressed && styles.forgotPasswordLinkPressed
+                    ]}
+                  >
+                    <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
+                  </Pressable>
+                </View>
+              ) : null}
+
+              {authNotice ? (
+                <View style={styles.successBox}>
+                  <Text style={styles.successText}>{authNotice}</Text>
+                </View>
               ) : null}
 
               {errorMessage ? (
@@ -2961,42 +3524,46 @@ export default function LoginScreen() {
                 </View>
               ) : null}
 
-              {authMode === "login" ? (
-                <Pressable onPress={() => setAuthMode("register")}>
-                  <Text style={styles.switchText}>
-                    Mobile number not registered? <Text style={styles.switchTextStrong}>Register</Text>
-                  </Text>
-                </Pressable>
-              ) : (
-                <Pressable onPress={() => setAuthMode("login")}>
-                  <Text style={styles.switchText}>
-                    Already registered? <Text style={styles.switchTextStrong}>Sign in</Text>
-                  </Text>
-                </Pressable>
-              )}
+              {!isResetOpen ? (
+                authMode === "login" ? (
+                  <Pressable onPress={() => setAuthMode("register")}>
+                    <Text style={styles.switchText}>
+                      Mobile number not registered? <Text style={styles.switchTextStrong}>Register</Text>
+                    </Text>
+                  </Pressable>
+                ) : (
+                  <Pressable onPress={() => setAuthMode("login")}>
+                    <Text style={styles.switchText}>
+                      Already registered? <Text style={styles.switchTextStrong}>Sign in</Text>
+                    </Text>
+                  </Pressable>
+                )
+              ) : null}
 
-              <Pressable
-                disabled={!isFormReady || isSubmitting}
-                onPress={authMode === "register" ? handleRegister : handleLogin}
-                onPressIn={() => {
-                  buttonPress.value = withTiming(1, { duration: 100 });
-                }}
-                onPressOut={() => {
-                  buttonPress.value = withTiming(0, { duration: 120 });
-                }}
-              >
-                <Animated.View style={[styles.loginButton, buttonStyle]}>
-                  <Text style={styles.loginButtonText}>
-                    {isSubmitting
-                      ? authMode === "register"
-                        ? "Creating..."
-                        : "Signing in..."
-                      : authMode === "register"
-                        ? "Register"
-                        : "Login"}
-                  </Text>
-                </Animated.View>
-              </Pressable>
+              {!isResetOpen ? (
+                <Pressable
+                  disabled={!isFormReady || isSubmitting}
+                  onPress={authMode === "register" ? handleRegister : handleLogin}
+                  onPressIn={() => {
+                    buttonPress.value = withTiming(1, { duration: 100 });
+                  }}
+                  onPressOut={() => {
+                    buttonPress.value = withTiming(0, { duration: 120 });
+                  }}
+                >
+                  <Animated.View style={[styles.loginButton, buttonStyle]}>
+                    <Text style={styles.loginButtonText}>
+                      {isSubmitting
+                        ? authMode === "register"
+                          ? "Creating..."
+                          : "Signing in..."
+                        : authMode === "register"
+                          ? "Register"
+                          : "Login"}
+                    </Text>
+                  </Animated.View>
+                </Pressable>
+              ) : null}
             </Animated.View>
           </Animated.View>
         </ScrollView>
@@ -3024,7 +3591,8 @@ const styles = StyleSheet.create({
   },
   homeScrollContent: {
     paddingHorizontal: 20,
-    paddingVertical: 24
+    paddingTop: 24,
+    paddingBottom: 118
   },
   glowTop: {
     position: "absolute",
@@ -3069,21 +3637,17 @@ const styles = StyleSheet.create({
   brandBadge: {
     width: 52,
     height: 52,
-    borderRadius: 18,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: palette.blue500,
-    shadowColor: palette.blue700,
-    shadowOpacity: 0.18,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 10 },
-    elevation: 6
+    backgroundColor: "transparent"
   },
-  brandBadgeText: {
-    color: "#F7FBFF",
-    fontSize: 18,
-    fontWeight: "800",
-    letterSpacing: 0.6
+  brandMark: {
+    width: 44,
+    height: 44,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: palette.blue700
   },
   brandEyebrow: {
     color: palette.blue700,
@@ -3140,7 +3704,12 @@ const styles = StyleSheet.create({
   },
   inputShell: {
     borderWidth: 1,
-    borderRadius: 20
+    borderRadius: 20,
+    position: "relative",
+    justifyContent: "center"
+  },
+  inputShellLocked: {
+    opacity: 0.78
   },
   input: {
     height: 58,
@@ -3149,11 +3718,56 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600"
   },
+  lockedInput: {
+    color: palette.textMuted
+  },
+  passwordInput: {
+    paddingRight: 58
+  },
+  inputAccessory: {
+    position: "absolute",
+    right: 10,
+    top: 0,
+    bottom: 0,
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  passwordToggle: {
+    width: 38,
+    height: 38,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(222, 235, 247, 0.48)",
+    borderWidth: 1,
+    borderColor: "rgba(8, 48, 107, 0.08)",
+    opacity: 0.88,
+    cursor: "pointer",
+    transform: [{ scale: 1 }],
+    transitionProperty: "background-color, opacity, transform, border-color",
+    transitionDuration: "0.18s",
+    transitionTimingFunction: "ease"
+  },
+  passwordToggleHover: {
+    backgroundColor: "rgba(222, 235, 247, 0.86)",
+    borderColor: "rgba(33, 113, 181, 0.16)",
+    opacity: 1,
+    transform: [{ scale: 1.04 }]
+  },
+  passwordTogglePressed: {
+    transform: [{ scale: 0.96 }]
+  },
+  loginOptionsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    marginBottom: 18
+  },
   rememberRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    marginBottom: 18
+    gap: 10
   },
   checkbox: {
     width: 22,
@@ -3180,6 +3794,94 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "700"
   },
+  forgotPasswordLink: {
+    paddingVertical: 6,
+    paddingLeft: 8,
+    opacity: 0.86,
+    cursor: "pointer",
+    transitionProperty: "opacity, transform",
+    transitionDuration: "0.18s",
+    transitionTimingFunction: "ease"
+  },
+  forgotPasswordLinkHover: {
+    opacity: 1,
+    transform: [{ scale: 1.02 }]
+  },
+  forgotPasswordLinkPressed: {
+    transform: [{ scale: 0.98 }]
+  },
+  forgotPasswordText: {
+    color: palette.blue800,
+    fontSize: 13,
+    fontWeight: "800",
+    textDecorationLine: "underline",
+    textDecorationColor: "rgba(33, 113, 181, 0.35)"
+  },
+  resetPanel: {
+    marginBottom: 18,
+    padding: 14,
+    borderRadius: 22,
+    backgroundColor: palette.surfaceSoft,
+    borderWidth: 1,
+    borderColor: "rgba(8, 48, 107, 0.08)"
+  },
+  resetPanelHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 12,
+    marginBottom: 14
+  },
+  resetPanelTitle: {
+    color: palette.blue900,
+    fontSize: 16,
+    fontWeight: "900"
+  },
+  resetPanelText: {
+    marginTop: 4,
+    color: palette.textMuted,
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: "600"
+  },
+  resetPanelClose: {
+    color: palette.blue800,
+    fontSize: 12,
+    fontWeight: "900"
+  },
+  resetValidationText: {
+    marginTop: -4,
+    marginBottom: 10,
+    color: palette.danger,
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: "700"
+  },
+  resetMessageText: {
+    marginTop: -4,
+    marginBottom: 10,
+    color: palette.blue800,
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: "700"
+  },
+  resetButton: {
+    minHeight: 50,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: palette.blue700,
+    shadowColor: palette.blue700,
+    shadowOpacity: 0.16,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 4
+  },
+  resetButtonText: {
+    color: "#F7FBFF",
+    fontSize: 15,
+    fontWeight: "900"
+  },
   errorBox: {
     marginBottom: 14,
     paddingHorizontal: 14,
@@ -3193,6 +3895,20 @@ const styles = StyleSheet.create({
     color: palette.blue900,
     fontSize: 14,
     fontWeight: "600"
+  },
+  successBox: {
+    marginBottom: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 16,
+    backgroundColor: "rgba(46, 155, 87, 0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(46, 155, 87, 0.22)"
+  },
+  successText: {
+    color: palette.success,
+    fontSize: 14,
+    fontWeight: "700"
   },
   switchText: {
     marginBottom: 16,
@@ -3222,7 +3938,14 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: palette.surfaceTint
+    backgroundColor: palette.surfaceTint,
+    borderWidth: 1,
+    borderColor: "rgba(33, 113, 181, 0.08)",
+    shadowColor: palette.blue700,
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 3
   },
   disabledButton: {
     opacity: 0.6
@@ -3232,47 +3955,361 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "800"
   },
+  workerSubmitPressable: {
+    borderRadius: 18,
+    transform: [{ scale: 1 }],
+    transitionProperty: "opacity, transform",
+    transitionDuration: "0.18s",
+    transitionTimingFunction: "ease"
+  },
+  workerSubmitPressableHover: {
+    transform: [{ scale: 1.025 }]
+  },
+  workerSubmitPressablePressed: {
+    transform: [{ scale: 0.97 }]
+  },
+  checkActionIcon: {
+    width: 30,
+    height: 22,
+    position: "relative"
+  },
+  checkActionStroke: {
+    position: "absolute",
+    height: 4,
+    borderRadius: 999,
+    backgroundColor: palette.blue800
+  },
+  checkActionShort: {
+    left: 4,
+    top: 11,
+    width: 11,
+    transform: [{ rotate: "45deg" }]
+  },
+  checkActionLong: {
+    right: 2,
+    top: 9,
+    width: 21,
+    transform: [{ rotate: "-45deg" }]
+  },
   sectionHeader: {
     marginBottom: 18
   },
-  logoutChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 16,
-    backgroundColor: palette.surfaceSoft
-  },
-  logoutChipText: {
-    color: palette.blue800,
-    fontSize: 14,
-    fontWeight: "800"
-  },
-  topTabs: {
-    flexDirection: "row",
-    gap: 10,
-    marginBottom: 2
-  },
-  topTabPressable: {
-    flex: 1
-  },
-  topTab: {
-    minHeight: 48,
+  logoutButton: {
+    width: 46,
+    height: 46,
     borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 6,
-    backgroundColor: palette.surfaceSoft
+    backgroundColor: palette.blue700,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.68)",
+    shadowColor: palette.blue700,
+    shadowOpacity: 0.16,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 5,
+    cursor: "pointer",
+    transform: [{ scale: 1 }],
+    transitionProperty: "background-color, box-shadow, transform",
+    transitionDuration: "0.18s",
+    transitionTimingFunction: "ease"
   },
-  topTabActive: {
+  logoutButtonHover: {
+    backgroundColor: palette.blue500,
+    shadowOpacity: 0.28,
+    shadowRadius: 18,
+    transform: [{ scale: 1.06 }]
+  },
+  logoutButtonPressed: {
+    transform: [{ scale: 0.96 }]
+  },
+  logoutIcon: {
+    width: 25,
+    height: 25,
+    position: "relative"
+  },
+  logoutDoor: {
+    position: "absolute",
+    left: 2,
+    top: 4,
+    width: 11,
+    height: 17,
+    borderLeftWidth: 2.5,
+    borderTopWidth: 2.5,
+    borderBottomWidth: 2.5,
+    borderColor: "#F7FBFF",
+    borderTopLeftRadius: 4,
+    borderBottomLeftRadius: 4
+  },
+  logoutArrowShaft: {
+    position: "absolute",
+    left: 9,
+    top: 11,
+    width: 13,
+    height: 2.8,
+    borderRadius: 999,
+    backgroundColor: "#F7FBFF"
+  },
+  logoutArrowHead: {
+    position: "absolute",
+    right: 2,
+    top: 11,
+    width: 8,
+    height: 2.8,
+    borderRadius: 999,
+    backgroundColor: "#F7FBFF"
+  },
+  logoutArrowHeadTop: {
+    transform: [{ rotate: "45deg" }],
+    top: 8
+  },
+  logoutArrowHeadBottom: {
+    transform: [{ rotate: "-45deg" }],
+    top: 14
+  },
+  bottomTabsDock: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: "center",
+    paddingHorizontal: 20,
+    paddingTop: 10,
+    paddingBottom: Platform.OS === "ios" ? 26 : 16,
+    backgroundColor: "rgba(247, 251, 255, 0.96)",
+    borderTopWidth: 1,
+    borderTopColor: "rgba(8, 48, 107, 0.08)"
+  },
+  bottomTabs: {
+    width: "100%",
+    maxWidth: 390,
+    flexDirection: "row",
+    gap: 8,
+    padding: 8,
+    borderRadius: 24,
+    backgroundColor: palette.surface,
+    borderWidth: 1,
+    borderColor: "rgba(8, 48, 107, 0.08)",
+    shadowColor: palette.blue900,
+    shadowOpacity: 0.12,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 10
+  },
+  bottomTabPressable: {
+    flex: 1,
+    transform: [{ scale: 1 }],
+    transitionProperty: "opacity, transform",
+    transitionDuration: "0.18s",
+    transitionTimingFunction: "ease"
+  },
+  bottomTabPressableHover: {
+    opacity: 0.94,
+    transform: [{ scale: 1.03 }]
+  },
+  bottomTabPressablePressed: {
+    transform: [{ scale: 0.96 }]
+  },
+  bottomTab: {
+    height: 58,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 5,
+    paddingHorizontal: 4,
+    backgroundColor: "transparent",
+    shadowColor: palette.blue700,
+    shadowOpacity: 0,
+    shadowRadius: 0,
+    shadowOffset: { width: 0, height: 0 },
+    transitionProperty: "background-color, box-shadow",
+    transitionDuration: "0.2s",
+    transitionTimingFunction: "ease"
+  },
+  bottomTabActive: {
+    backgroundColor: palette.surfaceTint,
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 5 }
+  },
+  bottomTabIconSlot: {
+    width: 28,
+    height: 24,
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  bottomTabDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 999,
+    backgroundColor: "transparent"
+  },
+  bottomTabDotActive: {
     backgroundColor: palette.blue700
   },
-  topTabText: {
+  bottomTabText: {
     color: palette.blue800,
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "800",
     textAlign: "center"
   },
-  topTabTextActive: {
-    color: "#F7FBFF"
+  bottomTabTextActive: {
+    color: palette.blue900
+  },
+  attendanceTabIcon: {
+    width: 28,
+    height: 24,
+    position: "relative",
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  attendanceCalendar: {
+    position: "absolute",
+    left: 3,
+    top: 4,
+    width: 22,
+    height: 18,
+    borderRadius: 5.5,
+    borderWidth: 2.8,
+    borderColor: palette.blue800,
+    backgroundColor: "transparent",
+    opacity: 0.9
+  },
+  attendanceCalendarActive: {
+    borderColor: palette.blue700,
+    opacity: 1
+  },
+  attendanceCalendarRing: {
+    position: "absolute",
+    top: -8,
+    width: 3.2,
+    height: 8,
+    borderRadius: 1.6,
+    backgroundColor: palette.blue800
+  },
+  attendanceCalendarRingActive: {
+    backgroundColor: palette.blue700
+  },
+  attendanceCalendarRingLeft: {
+    left: 4
+  },
+  attendanceCalendarRingRight: {
+    right: 4
+  },
+  manageTabIcon: {
+    width: 28,
+    height: 24,
+    position: "relative",
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  manageHead: {
+    position: "absolute",
+    top: 2,
+    width: 8,
+    height: 8,
+    borderRadius: 999,
+    backgroundColor: palette.blue800,
+    opacity: 0.9
+  },
+  manageHeadPrimary: {
+    left: 5
+  },
+  manageHeadSecondary: {
+    right: 5
+  },
+  manageBody: {
+    position: "absolute",
+    bottom: 3,
+    height: 10,
+    backgroundColor: palette.blue800,
+    opacity: 0.9
+  },
+  manageBodyPrimary: {
+    left: 1,
+    width: 21,
+    borderTopLeftRadius: 999,
+    borderTopRightRadius: 999,
+    borderBottomLeftRadius: 2,
+    borderBottomRightRadius: 2
+  },
+  manageBodySecondary: {
+    right: 1,
+    width: 15,
+    borderTopLeftRadius: 999,
+    borderTopRightRadius: 999,
+    borderBottomLeftRadius: 1,
+    borderBottomRightRadius: 1
+  },
+  manageIconActive: {
+    backgroundColor: palette.blue700,
+    opacity: 1
+  },
+  billingTabIcon: {
+    width: 28,
+    height: 24,
+    position: "relative",
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  billingReceipt: {
+    position: "absolute",
+    left: 5,
+    top: 2,
+    width: 18,
+    height: 20,
+    backgroundColor: palette.blue800,
+    opacity: 0.9
+  },
+  billingReceiptActive: {
+    backgroundColor: palette.blue700,
+    opacity: 1
+  },
+  billingZig: {
+    position: "absolute",
+    width: 7,
+    height: 7,
+    backgroundColor: palette.surface,
+    transform: [{ rotate: "45deg" }]
+  },
+  billingZigTopOne: {
+    top: -5,
+    left: 0
+  },
+  billingZigTopTwo: {
+    top: -5,
+    left: 6
+  },
+  billingZigTopThree: {
+    top: -5,
+    right: 0
+  },
+  billingZigBottomOne: {
+    bottom: -5,
+    left: 0
+  },
+  billingZigBottomTwo: {
+    bottom: -5,
+    left: 6
+  },
+  billingZigBottomThree: {
+    bottom: -5,
+    right: 0
+  },
+  billingLine: {
+    position: "absolute",
+    left: 4,
+    top: 6,
+    width: 10,
+    height: 2.5,
+    borderRadius: 999,
+    backgroundColor: palette.surface
+  },
+  billingLineMiddle: {
+    top: 11
+  },
+  billingLineLower: {
+    top: 16
   },
   calendarCard: {
     marginBottom: 16,
@@ -3375,16 +4412,106 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "800"
   },
-  addChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 9,
+  addChipPressable: {
     borderRadius: 16,
-    backgroundColor: palette.surfaceTint
+    transform: [{ scale: 1 }],
+    transitionProperty: "opacity, transform",
+    transitionDuration: "0.18s",
+    transitionTimingFunction: "ease"
+  },
+  addChipPressableHover: {
+    transform: [{ scale: 1.04 }]
+  },
+  addChipPressablePressed: {
+    transform: [{ scale: 0.96 }]
+  },
+  addChip: {
+    minWidth: 48,
+    height: 42,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: palette.surfaceTint,
+    shadowColor: palette.blue700,
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2
+  },
+  closeChipContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 7
   },
   addChipText: {
     color: palette.blue800,
     fontSize: 14,
     fontWeight: "800"
+  },
+  closeChipIcon: {
+    width: 14,
+    height: 14,
+    position: "relative"
+  },
+  closeChipIconStroke: {
+    position: "absolute",
+    left: 1,
+    top: 6,
+    width: 12,
+    height: 2.4,
+    borderRadius: 999,
+    backgroundColor: palette.blue800
+  },
+  closeChipIconStrokeOne: {
+    transform: [{ rotate: "45deg" }]
+  },
+  closeChipIconStrokeTwo: {
+    transform: [{ rotate: "-45deg" }]
+  },
+  addWorkerIcon: {
+    width: 34,
+    height: 26,
+    position: "relative"
+  },
+  addWorkerIconHead: {
+    position: "absolute",
+    left: 8,
+    top: 0,
+    width: 12,
+    height: 12,
+    borderRadius: 999,
+    backgroundColor: palette.blue800
+  },
+  addWorkerIconBody: {
+    position: "absolute",
+    left: 0,
+    bottom: 0,
+    width: 26,
+    height: 12,
+    borderTopLeftRadius: 999,
+    borderTopRightRadius: 999,
+    backgroundColor: palette.blue800
+  },
+  addWorkerIconPlusHorizontal: {
+    position: "absolute",
+    right: 0,
+    top: 9,
+    width: 14,
+    height: 3.5,
+    borderRadius: 999,
+    backgroundColor: palette.blue800
+  },
+  addWorkerIconPlusVertical: {
+    position: "absolute",
+    right: 5.25,
+    top: 3.75,
+    width: 3.5,
+    height: 14,
+    borderRadius: 999,
+    backgroundColor: palette.blue800
   },
   addWorkerCard: {
     marginBottom: 18,
@@ -3410,6 +4537,20 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "700"
   },
+  compactInputShell: {
+    position: "relative",
+    justifyContent: "center",
+    borderRadius: 16,
+    shadowColor: palette.blue700,
+    shadowOpacity: 0,
+    shadowRadius: 0,
+    shadowOffset: { width: 0, height: 0 }
+  },
+  compactInputShellFocused: {
+    shadowOpacity: 0.12,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 }
+  },
   compactInput: {
     height: 48,
     borderRadius: 16,
@@ -3420,6 +4561,32 @@ const styles = StyleSheet.create({
     color: palette.blue900,
     fontSize: 15,
     fontWeight: "600"
+  },
+  compactInputFocused: {
+    borderColor: "#B9DDF4"
+  },
+  compactInputWithIcon: {
+    paddingRight: 48
+  },
+  compactInputIcon: {
+    position: "absolute",
+    right: 12,
+    top: 0,
+    bottom: 0,
+    width: 28,
+    alignItems: "center",
+    justifyContent: "center",
+    opacity: 0.72
+  },
+  compactInputIconFocused: {
+    opacity: 1
+  },
+  rupeeIcon: {
+    color: palette.blue800,
+    fontSize: 19,
+    lineHeight: 22,
+    fontWeight: "800",
+    textAlign: "center"
   },
   emptyCard: {
     padding: 16,
@@ -3462,6 +4629,101 @@ const styles = StyleSheet.create({
     color: palette.textMuted,
     fontSize: 13,
     fontWeight: "600"
+  },
+  workerEditButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 15,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 10,
+    backgroundColor: palette.surfaceTint,
+    borderWidth: 1,
+    borderColor: "rgba(8, 48, 107, 0.06)",
+    shadowColor: palette.blue700,
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 1,
+    cursor: "pointer",
+    transform: [{ scale: 1 }],
+    transitionProperty: "background-color, box-shadow, transform, border-color",
+    transitionDuration: "0.18s",
+    transitionTimingFunction: "ease"
+  },
+  workerEditButtonHover: {
+    backgroundColor: "#E6F1FA",
+    borderColor: "rgba(33, 113, 181, 0.14)",
+    shadowOpacity: 0.14,
+    shadowRadius: 14,
+    transform: [{ scale: 1.06 }]
+  },
+  billingEditButtonActive: {
+    backgroundColor: "#DDEBFA",
+    borderColor: "rgba(33, 113, 181, 0.18)",
+    shadowOpacity: 0.1
+  },
+  workerEditButtonPressed: {
+    transform: [{ scale: 0.97 }]
+  },
+  pencilEditIcon: {
+    width: 24,
+    height: 24,
+    alignItems: "center",
+    justifyContent: "center",
+    position: "relative"
+  },
+  pencilEditOutline: {
+    position: "absolute",
+    left: 2,
+    bottom: 2,
+    width: 17,
+    height: 17,
+    borderLeftWidth: 2.4,
+    borderBottomWidth: 2.4,
+    borderRightWidth: 2.4,
+    borderColor: "#B9D0EF",
+    borderRadius: 6
+  },
+  pencilEditMark: {
+    position: "absolute",
+    width: 20,
+    height: 8,
+    right: 1,
+    top: 6,
+    alignItems: "center",
+    justifyContent: "center",
+    transform: [{ rotate: "-42deg" }]
+  },
+  pencilEditBody: {
+    position: "absolute",
+    left: 4,
+    width: 12,
+    height: 7,
+    borderRadius: 1.5,
+    backgroundColor: "#2F69D0"
+  },
+  pencilEditTip: {
+    position: "absolute",
+    left: -1,
+    width: 0,
+    height: 0,
+    borderTopWidth: 3.5,
+    borderBottomWidth: 3.5,
+    borderLeftWidth: 5,
+    borderTopColor: "transparent",
+    borderBottomColor: "transparent",
+    borderLeftColor: "#2F69D0",
+    transform: [{ rotate: "180deg" }]
+  },
+  pencilEditEraser: {
+    position: "absolute",
+    right: 0,
+    width: 5,
+    height: 7,
+    borderTopRightRadius: 2,
+    borderBottomRightRadius: 2,
+    backgroundColor: "#2F69D0"
   },
   symbolActions: {
     flexDirection: "row",
@@ -3639,7 +4901,16 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingTop: 4
+    flexWrap: "wrap",
+    gap: 12,
+    marginTop: 4,
+    paddingTop: 14,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(8, 48, 107, 0.08)"
+  },
+  expenseTotalBlock: {
+    flex: 1,
+    minWidth: 132
   },
   expenseFooterLabel: {
     color: palette.textMuted,
@@ -3649,6 +4920,42 @@ const styles = StyleSheet.create({
   expenseFooterAmount: {
     color: palette.blue900,
     fontSize: 15,
+    fontWeight: "900"
+  },
+  updateBillButton: {
+    minHeight: 44,
+    minWidth: 128,
+    paddingHorizontal: 18,
+    paddingVertical: 11,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: palette.blue700,
+    borderWidth: 1,
+    borderColor: "rgba(8, 48, 107, 0.08)",
+    shadowColor: palette.blue700,
+    shadowOpacity: 0.16,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 4,
+    cursor: "pointer",
+    transform: [{ scale: 1 }],
+    transitionProperty: "background-color, box-shadow, transform",
+    transitionDuration: "0.18s",
+    transitionTimingFunction: "ease"
+  },
+  updateBillButtonHover: {
+    backgroundColor: palette.blue800,
+    shadowOpacity: 0.24,
+    shadowRadius: 16,
+    transform: [{ scale: 1.04 }]
+  },
+  updateBillButtonPressed: {
+    transform: [{ scale: 0.98 }]
+  },
+  updateBillButtonText: {
+    color: "#F7FBFF",
+    fontSize: 13,
     fontWeight: "900"
   },
   billingTable: {
@@ -4014,6 +5321,36 @@ const styles = StyleSheet.create({
     opacity: 0.72,
     cursor: "default"
   },
+  generatedBillDeletePressable: {
+    minWidth: 36,
+    minHeight: 36,
+    paddingHorizontal: 9,
+    paddingVertical: 8,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#F7F1F2",
+    borderWidth: 1,
+    borderColor: "#EADDE0",
+    shadowColor: palette.blue900,
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 1,
+    cursor: "pointer",
+    transform: [{ scale: 1 }],
+    transitionProperty: "background-color, transform, border-color",
+    transitionDuration: "0.2s",
+    transitionTimingFunction: "ease"
+  },
+  generatedBillDeletePressableHover: {
+    backgroundColor: "#F1E3E6",
+    borderColor: "#E5D1D6",
+    transform: [{ scale: 1.05 }]
+  },
+  generatedBillDeletePressablePressed: {
+    transform: [{ scale: 0.98 }]
+  },
   eyeIcon: {
     width: 20,
     height: 18,
@@ -4036,46 +5373,60 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     backgroundColor: palette.blue800
   },
+  eyeIconSlash: {
+    position: "absolute",
+    width: 21,
+    height: 2,
+    borderRadius: 999,
+    backgroundColor: palette.blue800,
+    transform: [{ rotate: "-42deg" }]
+  },
   downloadIcon: {
-    width: 18,
-    height: 18,
+    width: 24,
+    height: 22,
     alignItems: "center",
     justifyContent: "center"
   },
   downloadIconArrowStem: {
     position: "absolute",
     top: 1,
-    width: 1.8,
-    height: 9,
+    width: 3.2,
+    height: 11,
     borderRadius: 999,
     backgroundColor: palette.blue800
   },
   downloadIconArrowHeadStroke: {
     position: "absolute",
-    top: 8,
-    width: 6,
-    height: 1.8,
+    top: 10,
+    width: 9,
+    height: 3.2,
     borderRadius: 999,
     backgroundColor: palette.blue800
   },
   downloadIconArrowHeadLeft: {
-    left: 4,
+    left: 5,
     transform: [{ rotate: "45deg" }]
   },
   downloadIconArrowHeadRight: {
-    right: 4,
+    right: 5,
     transform: [{ rotate: "-45deg" }]
+  },
+  downloadIconStrokeActive: {
+    backgroundColor: palette.blue700
   },
   downloadIconTray: {
     position: "absolute",
     bottom: 1,
-    width: 16,
-    height: 5,
-    borderWidth: 1.8,
+    width: 20,
+    height: 7,
+    borderWidth: 3.2,
     borderTopWidth: 0,
     borderColor: palette.blue800,
-    borderBottomLeftRadius: 4,
-    borderBottomRightRadius: 4
+    borderBottomLeftRadius: 6,
+    borderBottomRightRadius: 6
+  },
+  downloadIconTrayActive: {
+    borderColor: palette.blue700
   },
   generatedPreviewCard: {
     marginTop: 6,
@@ -4115,6 +5466,48 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     gap: 12,
     marginBottom: 12
+  },
+  generatedPreviewHeaderActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10
+  },
+  generatedPreviewActionButton: {
+    minWidth: 42,
+    minHeight: 42,
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#EEF3F8",
+    borderWidth: 1,
+    borderColor: "#E2EAF2",
+    shadowColor: palette.blue900,
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 1,
+    cursor: "pointer",
+    transform: [{ scale: 1 }],
+    transitionProperty: "background-color, transform, border-color",
+    transitionDuration: "0.2s",
+    transitionTimingFunction: "ease"
+  },
+  generatedPreviewActionButtonHover: {
+    backgroundColor: "#E2EAF2",
+    borderColor: "#D3DFEC",
+    transform: [{ scale: 1.05 }]
+  },
+  generatedPreviewActionButtonPressed: {
+    transform: [{ scale: 0.98 }]
+  },
+  generatedPreviewCloseButton: {
+    minHeight: 38,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 7
   },
   generatedPreviewEyebrow: {
     color: palette.blue700,
