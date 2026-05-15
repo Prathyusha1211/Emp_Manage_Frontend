@@ -5,6 +5,7 @@
     "scheme": "empmanage",
     "version": "1.0.0",
     "orientation": "portrait",
+    "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
@@ -19,11 +20,19 @@
     },
     "android": {
       "adaptiveIcon": {
+        "foregroundImage": "./assets/icon.png",
         "backgroundColor": "#F7FBFF"
-      }
+      },
+      "package": "com.employee.management"
     },
     "plugins": [
       "expo-router"
-    ]
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "7ed077a8-89ff-404c-bb03-8e4fbe94765b"
+      }
+    }
   }
 }
