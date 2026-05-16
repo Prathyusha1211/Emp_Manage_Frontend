@@ -6,6 +6,7 @@ import {
   Platform,
   Pressable,
   ScrollView,
+  Share,
   StyleSheet,
   Text,
   TextInput,
@@ -1353,35 +1354,21 @@ function AttendanceHome({ displayName, token, onLogout }) {
       });
     }
 
-    // MOBILE path - Save SVG to cache and share it
+    // MOBILE path - Share bill directly without file system
     try {
-      const svgFilename = `bill-${bill.displayDate}.svg`;
-      const cacheDir = FileSystem.cacheDirectory;
-      if (!cacheDir) {
-        throw new Error("Cannot access file system on this device.");
-      }
-
-      const svgPath = `${cacheDir}${svgFilename}`;
+      const title = `Bill - ${bill.displayDate}`;
+      const billInfo = `${displayName}'s Bill\n\nDate: ${bill.displayDate}\nWorkers: ${bill.presentCount}\nTotal: ₹${bill.totalAmount}`;
       
-      // Write SVG file to cache directory
-      await FileSystem.writeAsStringAsync(svgPath, svgMarkup, {
-        encoding: FileSystem.EncodingType.UTF8
-      });
-
-      // Check if sharing is available
-      const isAvailable = await Sharing.isAvailableAsync();
-      if (!isAvailable) {
-        throw new Error("Share feature is not available on this device. Please try again.");
-      }
-
-      // Open share sheet - user can save to gallery, email, drive, etc.
-      await Sharing.shareAsync(svgPath, {
-        mimeType: "image/svg+xml",
-        dialogTitle: `Share Bill - ${bill.displayDate}`,
-        UTI: "public.svg-image"
+      await Share.share({
+        message: billInfo,
+        title: title,
+        url: Platform.OS === "ios" ? svgMarkup : undefined // Share the bill info
       });
     } catch (error) {
-      throw new Error(`Failed to save bill: ${error.message || "Unknown error"}`);
+      // User dismissed share - this is not an error
+      if (error.message !== "User dismissed share dialog.") {
+        throw new Error(`Failed to share bill: ${error.message || "Please try again"}`);
+      }
     }
   }
   async function handleViewGeneratedBill(billKey) {
