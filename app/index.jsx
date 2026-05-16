@@ -652,48 +652,9 @@ function extractAttendanceList(result) {
   return [];
 }
 
-function decodeTokenName(token) {
-  try {
-    const payload = token.split(".")[1];
-    if (!payload) {
-      return "";
-    }
-
-    const normalized = payload.replace(/-/g, "+").replace(/_/g, "/");
-    const decoded =
-      typeof atob === "function"
-        ? atob(normalized)
-        : Buffer.from(normalized, "base64").toString("utf8");
-    const parsed = JSON.parse(decoded);
-    return parsed.fullName || parsed.name || "";
-  } catch {
-    return "";
-  }
-}
-
-function isLikelyPhoneValue(value) {
-  const normalized = String(value || "").trim();
-  return normalized.length > 0 && /^[0-9+\-\s()]+$/.test(normalized);
-}
-
 function resolveDisplayName(session) {
-  const storedName = String(session?.name || "").trim();
-  const tokenName = decodeTokenName(session?.token || "").trim();
-  const mappedName = getStoredUserName(session?.mobile || "").trim();
-
-  if (storedName && !isLikelyPhoneValue(storedName)) {
-    return storedName;
-  }
-
-  if (tokenName && !isLikelyPhoneValue(tokenName)) {
-    return tokenName;
-  }
-
-  if (mappedName && !isLikelyPhoneValue(mappedName)) {
-    return mappedName;
-  }
-
-  return "User";
+  const fullName = String(session?.fullName || "").trim();
+  return fullName || "User";
 }
 
 function decodeTokenPayload(token) {
@@ -704,10 +665,10 @@ function decodeTokenPayload(token) {
     }
 
     const normalized = payload.replace(/-/g, "+").replace(/_/g, "/");
-    const decoded =
-      typeof atob === "function"
-        ? atob(normalized)
-        : Buffer.from(normalized, "base64").toString("utf8");
+    if (typeof atob !== "function") {
+      return null;
+    }
+    const decoded = atob(normalized);
 
     return JSON.parse(decoded);
   } catch {
@@ -779,54 +740,7 @@ async function clearPersistedSession() {
   } catch { }
 }
 
-function readStoredUserNames() {
-  try {
-    if (!globalThis.localStorage) {
-      return {};
-    }
 
-    const raw = globalThis.localStorage.getItem(USER_NAME_STORAGE_KEY);
-    if (!raw) {
-      return {};
-    }
-
-    const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === "object" ? parsed : {};
-  } catch {
-    return {};
-  }
-}
-
-function persistUserName(mobile, fullName) {
-  try {
-    if (!globalThis.localStorage) {
-      return;
-    }
-
-    const normalizedMobile = String(mobile || "").trim();
-    const normalizedName = String(fullName || "").trim();
-
-    if (!normalizedMobile || !normalizedName || isLikelyPhoneValue(normalizedName)) {
-      return;
-    }
-
-    const current = readStoredUserNames();
-    current[normalizedMobile] = normalizedName;
-    globalThis.localStorage.setItem(USER_NAME_STORAGE_KEY, JSON.stringify(current));
-  } catch {
-    // Ignore storage failures and continue.
-  }
-}
-
-function getStoredUserName(mobile) {
-  const normalizedMobile = String(mobile || "").trim();
-  if (!normalizedMobile) {
-    return "";
-  }
-
-  const storedNames = readStoredUserNames();
-  return String(storedNames[normalizedMobile] || "").trim();
-}
 
 function AnimatedField({
   label,
@@ -1398,7 +1312,6 @@ function AttendanceHome({ displayName, token, onLogout }) {
   // }
 
   async function downloadGeneratedBillFile(bill) {
-    const filename = `bill-${bill.displayDate}.svg`;
     const svgMarkup = buildBillImageSvg(bill, displayName);
 
     // WEB path
@@ -1440,22 +1353,38 @@ function AttendanceHome({ displayName, token, onLogout }) {
       });
     }
 
-    // MOBILE path
-    const svgPath = `${FileSystem.cacheDirectory}${filename}`;
-    await FileSystem.writeAsStringAsync(svgPath, svgMarkup, {
-      encoding: FileSystem.EncodingType.UTF8
-    });
+    // MOBILE path - Save SVG file and share it
+    try {
+      const svgFilename = `bill-${bill.displayDate}.svg`;
+      const documentsDir = FileSystem.documentDirectory;
+      if (!documentsDir) {
+        throw new Error("Cannot access documents directory.");
+      }
 
-    const isAvailable = await Sharing.isAvailableAsync();
-    if (!isAvailable) {
-      throw new Error("Sharing is not available on this device.");
+      const svgPath = `${documentsDir}${svgFilename}`;
+      
+      // Write SVG file to documents directory
+      await FileSystem.writeAsStringAsync(svgPath, svgMarkup, {
+        encoding: FileSystem.EncodingType.UTF8
+      });
+
+      // Check if sharing is available
+      const isAvailable = await Sharing.isAvailableAsync();
+      if (!isAvailable) {
+        // If sharing not available, still notify that file was saved
+        setErrorMessage(`Bill saved to: ${svgPath}`);
+        return;
+      }
+
+      // Share the file
+      await Sharing.shareAsync(svgPath, {
+        mimeType: "image/svg+xml",
+        dialogTitle: `Share Bill - ${bill.displayDate}`,
+        UTI: "public.svg-image"
+      });
+    } catch (error) {
+      throw new Error(`Failed to export bill: ${error.message || "Unknown error"}`);
     }
-
-    await Sharing.shareAsync(svgPath, {
-      mimeType: "image/svg+xml",
-      dialogTitle: `Bill ${bill.displayDate}`,
-      UTI: "public.svg-image"
-    });
   }
   async function handleViewGeneratedBill(billKey) {
     setLoadingGeneratedBillAction(`view-${billKey}`);
@@ -1478,6 +1407,12 @@ function AttendanceHome({ displayName, token, onLogout }) {
     try {
       const bill = await getGeneratedBillForKey(billKey);
       await downloadGeneratedBillFile(bill);
+      
+      // Show success message on mobile when file is saved
+      if (Platform.OS !== "web") {
+        setErrorMessage(`✓ Bill saved successfully! Check your downloads or share options.`);
+        setTimeout(() => setErrorMessage(""), 3000);
+      }
     } catch (error) {
       setErrorMessage(error.message || "Failed to download generated bill.");
     } finally {
@@ -3383,11 +3318,10 @@ export default function LoginScreen() {
         token: result?.token || "",
         mobile: result?.user?.mobile || mobile.trim(),
         rememberMe: true,
-        fullName: result?.user?.fullName || getStoredUserName(mobile.trim()) || "User"
+        fullName: result?.user?.fullName || "User"
       };
 
       setSession(nextSession);
-      persistUserName(nextSession.mobile, nextSession.fullName);
       await persistSession(nextSession);
     } catch (error) {
       const message = error.message || "Login failed";
@@ -3431,7 +3365,6 @@ export default function LoginScreen() {
       };
 
       setSession(nextSession);
-      persistUserName(nextSession.mobile, nextSession.fullName);
       await persistSession(nextSession);
     } catch (error) {
       setErrorMessage(error.message || "Registration failed");
@@ -3530,7 +3463,7 @@ export default function LoginScreen() {
             <Animated.View entering={FadeInDown.delay(120).duration(550)} style={styles.brandRow}>
               <BrandLogo />
               <View style={styles.brandCopy}>
-                <Text style={styles.brandEyebrow}>Employee Management</Text>
+                <Text style={styles.brandEyebrow}>Mark Mate</Text>
                 <Text style={styles.brandTitle}>
                   {authMode === "register" ? "Create account" : "Welcome back"}
                 </Text>
