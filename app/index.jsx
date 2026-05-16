@@ -46,6 +46,7 @@ import {
 import {
   addWorker,
   deleteBill,
+  deleteWorker,
   editWorker,
   getAttendanceByDate,
   getBillById,
@@ -56,6 +57,7 @@ import {
   resetUserPassword,
   storeBill
 } from "../src/api";
+import { PINEntry } from "./components/PINEntry";
 
 const palette = {
   bg: "#F7FBFF",
@@ -252,10 +254,10 @@ function normalizeStoredBillPayload(storedBill) {
   }));
   const extraExpenses = Array.isArray(payload?.extraExpenses)
     ? payload.extraExpenses.map((item, index) => ({
-        id: item.id || `${storedBill?._id || "bill"}-expense-${index}`,
-        reason: String(item.reason || "").trim() || `Expense ${index + 1}`,
-        amount: Number(item.amount) || 0
-      }))
+      id: item.id || `${storedBill?._id || "bill"}-expense-${index}`,
+      reason: String(item.reason || "").trim() || `Expense ${index + 1}`,
+      amount: Number(item.amount) || 0
+    }))
     : [];
   const presentCount = Number(payload?.presentCount) || rows.length;
   const absentCount = Number(payload?.absentCount) || 0;
@@ -339,8 +341,8 @@ function getGeneratedBillKey(bill) {
 function buildBillDocumentHtml(bill, contractorName) {
   const rowMarkup = bill.rows.length
     ? bill.rows
-        .map(
-          (worker, index) => `
+      .map(
+        (worker, index) => `
             <tr>
               <td>${index + 1}</td>
               <td>${worker.name}</td>
@@ -349,8 +351,8 @@ function buildBillDocumentHtml(bill, contractorName) {
               <td>${worker.total}</td>
             </tr>
           `
-        )
-        .join("")
+      )
+      .join("")
     : `
       <tr>
         <td colspan="5">No workers were marked present for this bill.</td>
@@ -358,16 +360,16 @@ function buildBillDocumentHtml(bill, contractorName) {
     `;
   const expenseMarkup = bill.extraExpenses?.length
     ? bill.extraExpenses
-        .map(
-          (expense, index) => `
+      .map(
+        (expense, index) => `
             <tr>
               <td>${index + 1}</td>
               <td colspan="3">${expense.reason}</td>
               <td>${expense.amount}</td>
             </tr>
           `
-        )
-        .join("")
+      )
+      .join("")
     : `
       <tr>
         <td colspan="5">No other expenses were saved for this bill.</td>
@@ -458,7 +460,7 @@ function buildBillDocumentHtml(bill, contractorName) {
               <h1>${bill.displayDate}</h1>
             </div>
             <div>
-              <div class="eyebrow">Contractor</div>
+              <div class="eyebrow">User</div>
               <div>${contractorName}</div>
             </div>
           </div>
@@ -538,8 +540,8 @@ function buildBillImageSvg(bill, contractorName) {
     summaryHeight;
   const rows = bill.rows.length
     ? bill.rows
-        .map(
-          (worker, index) => `
+      .map(
+        (worker, index) => `
             <g transform="translate(0, ${232 + index * rowHeight})">
               <rect x="60" y="0" width="1080" height="52" fill="#ffffff" />
               <text x="90" y="33" font-size="20" font-weight="700" fill="#08519C">${index + 1}</text>
@@ -550,8 +552,8 @@ function buildBillImageSvg(bill, contractorName) {
               <line x1="60" y1="51" x2="1140" y2="51" stroke="#D6E5F2" stroke-width="1" />
             </g>
           `
-        )
-        .join("")
+      )
+      .join("")
     : `
       <g transform="translate(0, 232)">
         <rect x="60" y="0" width="1080" height="52" fill="#ffffff" />
@@ -563,8 +565,8 @@ function buildBillImageSvg(bill, contractorName) {
   const expenseStartY = workerSummaryY + workerSummaryHeight + blockGap;
   const expenseRowsMarkup = expenseRows
     ? bill.extraExpenses
-        .map(
-          (expense, index) => `
+      .map(
+        (expense, index) => `
             <g transform="translate(0, ${expenseStartY + 52 + index * rowHeight})">
               <rect x="60" y="0" width="1080" height="52" fill="#ffffff" />
               <text x="90" y="33" font-size="20" font-weight="700" fill="#08519C">${index + 1}</text>
@@ -573,8 +575,8 @@ function buildBillImageSvg(bill, contractorName) {
               <line x1="60" y1="51" x2="1140" y2="51" stroke="#D6E5F2" stroke-width="1" />
             </g>
           `
-        )
-        .join("")
+      )
+      .join("")
     : `
       <g transform="translate(0, ${expenseStartY + 52})">
         <rect x="60" y="0" width="1080" height="52" fill="#ffffff" />
@@ -591,12 +593,12 @@ function buildBillImageSvg(bill, contractorName) {
       <rect x="40" y="40" width="1120" height="${height - 80}" rx="28" fill="#FFFFFF" stroke="#D6E5F2" />
       <text x="70" y="96" font-size="18" font-weight="800" fill="#2171B5">GENERATED BILL</text>
       <text x="70" y="144" font-size="40" font-weight="900" fill="#08306B">${escapeMarkup(
-        bill.displayDate
-      )}</text>
+    bill.displayDate
+  )}</text>
       <text x="840" y="96" font-size="18" font-weight="800" fill="#2171B5">CONTRACTOR</text>
       <text x="840" y="136" font-size="28" font-weight="800" fill="#08306B">${escapeMarkup(
-        contractorName
-      )}</text>
+    contractorName
+  )}</text>
 
       <rect x="60" y="180" width="1080" height="52" fill="#DEEBF7" />
       <text x="90" y="213" font-size="20" font-weight="800" fill="#08519C">#</text>
@@ -609,9 +611,8 @@ function buildBillImageSvg(bill, contractorName) {
 
       <rect x="60" y="${workerSummaryY}" width="1080" height="54" rx="18" fill="#DEEBF7" />
       <text x="90" y="${workerSummaryY + 34}" font-size="22" font-weight="900" fill="#08306B">Worker Total</text>
-      <text x="1110" y="${workerSummaryY + 34}" font-size="24" font-weight="900" text-anchor="end" fill="#08306B">${
-        bill.workerTotal ?? bill.totalAmount
-      }</text>
+      <text x="1110" y="${workerSummaryY + 34}" font-size="24" font-weight="900" text-anchor="end" fill="#08306B">${bill.workerTotal ?? bill.totalAmount
+    }</text>
 
       <rect x="60" y="${expenseStartY}" width="1080" height="52" fill="#DEEBF7" />
       <text x="90" y="${expenseStartY + 33}" font-size="20" font-weight="800" fill="#08519C">#</text>
@@ -622,9 +623,8 @@ function buildBillImageSvg(bill, contractorName) {
 
       <rect x="60" y="${expenseSummaryY}" width="1080" height="54" rx="18" fill="#DEEBF7" />
       <text x="90" y="${expenseSummaryY + 34}" font-size="22" font-weight="900" fill="#08306B">Other Expenses</text>
-      <text x="1110" y="${expenseSummaryY + 34}" font-size="24" font-weight="900" text-anchor="end" fill="#08306B">${
-        bill.extraExpensesTotal || 0
-      }</text>
+      <text x="1110" y="${expenseSummaryY + 34}" font-size="24" font-weight="900" text-anchor="end" fill="#08306B">${bill.extraExpensesTotal || 0
+    }</text>
 
       <rect x="60" y="${grandSummaryY}" width="1080" height="74" rx="18" fill="#2171B5" />
       <text x="90" y="${grandSummaryY + 45}" font-size="24" font-weight="900" fill="#FFFFFF">Grand Total</text>
@@ -993,28 +993,28 @@ function BottomTabs({ activeTab, onChange }) {
             ]}
             onPress={() => onChange(tab.key)}
           >
-          <View style={[styles.bottomTab, active && styles.bottomTabActive]}>
-            <View style={styles.bottomTabIconSlot}>
-              {tab.key === "attendance" ? (
-                <AttendanceTabIcon active={active} />
-              ) : tab.key === "manage" ? (
-                <ManageTabIcon active={active} />
-              ) : tab.key === "billing" ? (
-                <BillingTabIcon active={active} />
-              ) : tab.key === "generated-bills" ? (
-                <DownloadIcon active={active} />
-              ) : (
-                <View style={[styles.bottomTabDot, active && styles.bottomTabDotActive]} />
-              )}
+            <View style={[styles.bottomTab, active && styles.bottomTabActive]}>
+              <View style={styles.bottomTabIconSlot}>
+                {tab.key === "attendance" ? (
+                  <AttendanceTabIcon active={active} />
+                ) : tab.key === "manage" ? (
+                  <ManageTabIcon active={active} />
+                ) : tab.key === "billing" ? (
+                  <BillingTabIcon active={active} />
+                ) : tab.key === "generated-bills" ? (
+                  <DownloadIcon active={active} />
+                ) : (
+                  <View style={[styles.bottomTabDot, active && styles.bottomTabDotActive]} />
+                )}
+              </View>
+              <Text
+                style={[styles.bottomTabText, active && styles.bottomTabTextActive]}
+                numberOfLines={1}
+              >
+                {tab.label}
+              </Text>
             </View>
-            <Text
-              style={[styles.bottomTabText, active && styles.bottomTabTextActive]}
-              numberOfLines={1}
-            >
-              {tab.label}
-            </Text>
-          </View>
-        </Pressable>
+          </Pressable>
         );
       })}
     </View>
@@ -1045,6 +1045,8 @@ function AttendanceHome({ displayName, token, onLogout }) {
   const [isWorkerWageFocused, setIsWorkerWageFocused] = useState(false);
   const [showAddWorkerForm, setShowAddWorkerForm] = useState(false);
   const [editingWorker, setEditingWorker] = useState(null);
+  const [workerDeleteTarget, setWorkerDeleteTarget] = useState(null);
+  const [isDeletingWorker, setIsDeletingWorker] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [loadingList, setLoadingList] = useState(false);
   const [loadingBilling, setLoadingBilling] = useState(false);
@@ -1177,22 +1179,22 @@ function AttendanceHome({ displayName, token, onLogout }) {
       const monthKey = bill.monthKey;
       const nextMonth = current[monthKey]
         ? {
-            ...current[monthKey],
-            bills: current[monthKey].bills
-              .filter((item) => getGeneratedBillKey(item) !== billKey)
-              .concat(bill)
-              .sort(
-                (left, right) =>
-                  right.dateKey.localeCompare(left.dateKey) ||
-                  (right.id || "").localeCompare(left.id || "") ||
-                  (right.rangeDisplayDate || "").localeCompare(left.rangeDisplayDate || "")
-              )
-          }
+          ...current[monthKey],
+          bills: current[monthKey].bills
+            .filter((item) => getGeneratedBillKey(item) !== billKey)
+            .concat(bill)
+            .sort(
+              (left, right) =>
+                right.dateKey.localeCompare(left.dateKey) ||
+                (right.id || "").localeCompare(left.id || "") ||
+                (right.rangeDisplayDate || "").localeCompare(left.rangeDisplayDate || "")
+            )
+        }
         : {
-            monthKey,
-            label: formatMonthHeading(monthKey),
-            bills: [bill]
-          };
+          monthKey,
+          label: formatMonthHeading(monthKey),
+          bills: [bill]
+        };
 
       return {
         ...current,
@@ -1328,11 +1330,64 @@ function AttendanceHome({ displayName, token, onLogout }) {
     }
   }
 
-  function downloadGeneratedBillFile(bill) {
-    const filename = `bill-${bill.displayDate}.png`;
+  // function downloadGeneratedBillFile(bill) {
+  //   const filename = `bill-${bill.displayDate}.png`;
 
+  //   if (Platform.OS === "web" && globalThis.document && globalThis.URL && globalThis.Image) {
+  //     const svgMarkup = buildBillImageSvg(bill, displayName);
+  //     const svgBlob = new Blob([svgMarkup], { type: "image/svg+xml;charset=utf-8" });
+  //     const svgUrl = globalThis.URL.createObjectURL(svgBlob);
+
+  //     return new Promise((resolve, reject) => {
+  //       const image = new globalThis.Image();
+  //       image.onload = () => {
+  //         try {
+  //           const canvas = globalThis.document.createElement("canvas");
+  //           canvas.width = image.width;
+  //           canvas.height = image.height;
+  //           const context = canvas.getContext("2d");
+
+  //           if (!context) {
+  //             throw new Error("Canvas is not available for image export.");
+  //           }
+
+  //           context.fillStyle = "#F7FBFF";
+  //           context.fillRect(0, 0, canvas.width, canvas.height);
+  //           context.drawImage(image, 0, 0);
+
+  //           const pngUrl = canvas.toDataURL("image/png");
+  //           const link = globalThis.document.createElement("a");
+  //           link.href = pngUrl;
+  //           link.download = filename;
+  //           globalThis.document.body.appendChild(link);
+  //           link.click();
+  //           globalThis.document.body.removeChild(link);
+  //           globalThis.URL.revokeObjectURL(svgUrl);
+  //           resolve();
+  //         } catch (error) {
+  //           globalThis.URL.revokeObjectURL(svgUrl);
+  //           reject(error);
+  //         }
+  //       };
+
+  //       image.onerror = () => {
+  //         globalThis.URL.revokeObjectURL(svgUrl);
+  //         reject(new Error("Failed to generate bill image."));
+  //       };
+
+  //       image.src = svgUrl;
+  //     });
+  //   }
+
+  //   throw new Error("Image download is available in the browser build for now.");
+  // }
+
+  async function downloadGeneratedBillFile(bill) {
+    const filename = `bill-${bill.displayDate}.png`;
+    const svgMarkup = buildBillImageSvg(bill, displayName);
+
+    // WEB path — unchanged
     if (Platform.OS === "web" && globalThis.document && globalThis.URL && globalThis.Image) {
-      const svgMarkup = buildBillImageSvg(bill, displayName);
       const svgBlob = new Blob([svgMarkup], { type: "image/svg+xml;charset=utf-8" });
       const svgUrl = globalThis.URL.createObjectURL(svgBlob);
 
@@ -1345,9 +1400,7 @@ function AttendanceHome({ displayName, token, onLogout }) {
             canvas.height = image.height;
             const context = canvas.getContext("2d");
 
-            if (!context) {
-              throw new Error("Canvas is not available for image export.");
-            }
+            if (!context) throw new Error("Canvas is not available for image export.");
 
             context.fillStyle = "#F7FBFF";
             context.fillRect(0, 0, canvas.width, canvas.height);
@@ -1367,17 +1420,37 @@ function AttendanceHome({ displayName, token, onLogout }) {
             reject(error);
           }
         };
-
         image.onerror = () => {
           globalThis.URL.revokeObjectURL(svgUrl);
           reject(new Error("Failed to generate bill image."));
         };
-
         image.src = svgUrl;
       });
     }
 
-    throw new Error("Image download is available in the browser build for now.");
+    // MOBILE path — SVG saved as file and shared
+    try {
+      const FileSystem = await import("expo-file-system");
+      const Sharing = await import("expo-sharing");
+
+      const svgPath = `${FileSystem.cacheDirectory}${filename.replace(".png", ".svg")}`;
+      await FileSystem.writeAsStringAsync(svgPath, svgMarkup, {
+        encoding: FileSystem.EncodingType.UTF8
+      });
+
+      const isAvailable = await Sharing.isAvailableAsync();
+      if (!isAvailable) {
+        throw new Error("Sharing is not available on this device.");
+      }
+
+      await Sharing.shareAsync(svgPath, {
+        mimeType: "image/svg+xml",
+        dialogTitle: `Bill ${bill.displayDate}`,
+        UTI: "public.svg-image"
+      });
+    } catch (error) {
+      throw new Error(error.message || "Failed to share bill on mobile.");
+    }
   }
 
   async function handleViewGeneratedBill(billKey) {
@@ -1759,8 +1832,8 @@ function AttendanceHome({ displayName, token, onLogout }) {
       await editWorker(
         editingWorker._id,
         {
-            name: workerName.trim(),
-            wage: Number(workerWage)
+          name: workerName.trim(),
+          wage: Number(workerWage)
         },
         token
       );
@@ -1786,6 +1859,48 @@ function AttendanceHome({ displayName, token, onLogout }) {
     setWorkerWage("");
     setEditingWorker(null);
     setShowAddWorkerForm(false);
+  }
+
+  async function handleDeleteWorker() {
+    if (!editingWorker?._id) {
+      return;
+    }
+    setWorkerDeleteTarget(editingWorker);
+  }
+
+  async function confirmDeleteWorker() {
+    if (!workerDeleteTarget?._id) {
+      return;
+    }
+
+    setIsDeletingWorker(true);
+    setErrorMessage("");
+
+    try {
+      await deleteWorker(workerDeleteTarget._id, token);
+      setWorkerDeleteTarget(null);
+      resetWorkerForm();
+      await loadAttendance(selectedDate);
+      if (activeTab === "billing") {
+        if (hasBillingFilter) {
+          await loadBillingSummary(billingFromDate, billingToDate);
+        } else {
+          setBillingRows([]);
+        }
+      }
+    } catch (error) {
+      setErrorMessage(error.message || "Failed to delete worker.");
+    } finally {
+      setIsDeletingWorker(false);
+    }
+  }
+
+  function cancelDeleteWorker() {
+    setWorkerDeleteTarget(null);
+  }
+
+  function showDeleteConfirmation(worker) {
+    setWorkerDeleteTarget(worker);
   }
 
   function openAddWorkerForm() {
@@ -1937,19 +2052,40 @@ function AttendanceHome({ displayName, token, onLogout }) {
     });
   }
 
-  function removeExpenseRow() {
+  // function removeExpenseRow() {
+  //   setExtraExpensesByMonth((current) => {
+  //     const currentRows = current[billingRangeKey] || [
+  //       { id: createExpenseRowId(billingRangeKey, 1), reason: "", amount: "" }
+  //     ];
+  //     const nextRows =
+  //       currentRows.length > 1
+  //         ? currentRows.slice(0, -1)
+  //         : [{ id: createExpenseRowId(billingRangeKey, 1), reason: "", amount: "" }];
+
+  //     return {
+  //       ...current,
+  //       [billingRangeKey]: nextRows
+  //     };
+  //   });
+  // }
+
+  function removeExpenseRow(rowId) {
     setExtraExpensesByMonth((current) => {
       const currentRows = current[billingRangeKey] || [
         { id: createExpenseRowId(billingRangeKey, 1), reason: "", amount: "" }
       ];
-      const nextRows =
-        currentRows.length > 1
-          ? currentRows.slice(0, -1)
-          : [{ id: createExpenseRowId(billingRangeKey, 1), reason: "", amount: "" }];
+
+      if (currentRows.length <= 1) {
+        // Reset to a single blank row instead of removing the last one
+        return {
+          ...current,
+          [billingRangeKey]: [{ id: createExpenseRowId(billingRangeKey, 1), reason: "", amount: "" }]
+        };
+      }
 
       return {
         ...current,
-        [billingRangeKey]: nextRows
+        [billingRangeKey]: currentRows.filter((row) => row.id !== rowId)
       };
     });
   }
@@ -1971,7 +2107,7 @@ function AttendanceHome({ displayName, token, onLogout }) {
 
   function openBillingPicker(target) {
     const selectedDateKey = target === "from" ? billingFromDate : billingToDate;
-    const targetDate = selectedDateKey ? parseDateKey(selectedDateKey) : new Date();
+    const targetDate = selectedDateKey ? parseDateKey(selectedDateKey) : todayKey;
 
     setBillingPickerTarget(target);
     setBillingPickerMonth(
@@ -2012,7 +2148,7 @@ function AttendanceHome({ displayName, token, onLogout }) {
             <View style={styles.brandRow}>
               <BrandLogo />
               <View style={styles.brandCopy}>
-                <Text style={styles.brandEyebrow}>Employee Management</Text>
+                <Text style={styles.brandEyebrow}>Mark Mate</Text>
                 <Text style={styles.brandTitle}>{displayName}</Text>
               </View>
             </View>
@@ -2311,30 +2447,77 @@ function AttendanceHome({ displayName, token, onLogout }) {
                         </View>
                       </View>
                     </View>
-                    <Pressable
-                      accessibilityRole="button"
-                      accessibilityLabel={editingWorker ? "Update worker" : "Save worker"}
-                      disabled={!workerName.trim() || !workerWage.trim() || addingWorker}
-                      onPress={handleWorkerSubmit}
-                      style={({ hovered, pressed }) => [
-                        styles.workerSubmitPressable,
-                        hovered && !addingWorker && styles.workerSubmitPressableHover,
-                        pressed && !addingWorker && styles.workerSubmitPressablePressed
-                      ]}
-                    >
-                      <View
-                        style={[
-                          styles.secondaryButton,
-                          (!workerName.trim() || !workerWage.trim() || addingWorker) && styles.disabledButton
+                    <View style={styles.workerFormActions}>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={editingWorker ? "Update worker" : "Save worker"}
+                        disabled={!workerName.trim() || !workerWage.trim() || addingWorker}
+                        onPress={handleWorkerSubmit}
+                        style={({ hovered, pressed }) => [
+                          styles.workerSubmitPressable,
+                          { flex: editingWorker ? 1 : 1 },
+                          hovered && !addingWorker && styles.workerSubmitPressableHover,
+                          pressed && !addingWorker && styles.workerSubmitPressablePressed
                         ]}
                       >
-                        {addingWorker ? (
-                          <ActivityIndicator color={palette.blue800} />
-                        ) : (
-                          <CheckActionIcon />
-                        )}
-                      </View>
-                    </Pressable>
+                        <View
+                          style={[
+                            styles.secondaryButton,
+                            (!workerName.trim() || !workerWage.trim() || addingWorker) && styles.disabledButton
+                          ]}
+                        >
+                          {addingWorker ? (
+                            <ActivityIndicator color={palette.blue800} />
+                          ) : (
+                            <CheckActionIcon />
+                          )}
+                        </View>
+                      </Pressable>
+
+                      {editingWorker ? (
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel="Delete worker"
+                          disabled={addingWorker}
+                          onPress={handleDeleteWorker}
+                          style={({ hovered, pressed }) => [
+                            styles.workerDeleteFormPressable,
+                            hovered && !addingWorker && styles.workerDeleteFormPressableHover,
+                            pressed && !addingWorker && styles.workerDeleteFormPressablePressed
+                          ]}
+                        >
+                          <View
+                            style={[
+                              styles.dangerButton,
+                              addingWorker && styles.disabledButton
+                            ]}
+                          >
+                            <MuiAppIcon icon={DeleteIcon} color={palette.danger} size={20} />
+                          </View>
+                        </Pressable>
+                      ) : null}
+
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel="Close form"
+                        disabled={addingWorker}
+                        onPress={resetWorkerForm}
+                        style={({ hovered, pressed }) => [
+                          styles.workerClosePressable,
+                          hovered && !addingWorker && styles.workerClosePressableHover,
+                          pressed && !addingWorker && styles.workerClosePressablePressed
+                        ]}
+                      >
+                        <View
+                          style={[
+                            styles.tertiaryButton,
+                            addingWorker && styles.disabledButton
+                          ]}
+                        >
+                          <CloseChipIcon />
+                        </View>
+                      </Pressable>
+                    </View>
                   </View>
                 ) : null}
 
@@ -2354,18 +2537,32 @@ function AttendanceHome({ displayName, token, onLogout }) {
                         <Text style={styles.workerName}>{worker.name}</Text>
                         <Text style={styles.workerWage}>Daily wage: {worker.wage}</Text>
                       </View>
-                      <Pressable
-                        accessibilityLabel={`Edit ${worker.name}`}
-                        title="Edit"
-                        onPress={() => openEditWorkerForm(worker)}
-                        style={({ hovered, pressed }) => [
-                          styles.workerEditButton,
-                          hovered && styles.workerEditButtonHover,
-                          pressed && styles.workerEditButtonPressed
-                        ]}
-                      >
-                        <PencilEditIcon />
-                      </Pressable>
+                      <View style={styles.workerActions}>
+                        <Pressable
+                          accessibilityLabel={`Edit ${worker.name}`}
+                          title="Edit"
+                          onPress={() => openEditWorkerForm(worker)}
+                          style={({ hovered, pressed }) => [
+                            styles.workerEditButton,
+                            hovered && styles.workerEditButtonHover,
+                            pressed && styles.workerEditButtonPressed
+                          ]}
+                        >
+                          <PencilEditIcon />
+                        </Pressable>
+                        <Pressable
+                          accessibilityLabel={`Delete ${worker.name}`}
+                          title="Delete"
+                          onPress={() => showDeleteConfirmation(worker)}
+                          style={({ hovered, pressed }) => [
+                            styles.workerDeleteButton,
+                            hovered && styles.workerDeleteButtonHover,
+                            pressed && styles.workerDeleteButtonPressed
+                          ]}
+                        >
+                          <MuiAppIcon icon={DeleteIcon} color={palette.danger} size={20} />
+                        </Pressable>
+                      </View>
                     </View>
                   </View>
                 ))}
@@ -2381,328 +2578,337 @@ function AttendanceHome({ displayName, token, onLogout }) {
                   }
                 }}
               >
-              <View style={styles.billingCard}>
-                <View style={styles.billingHeader}>
-                  <View>
-                    <Text style={styles.billingTodayLabel}>Generated date</Text>
-                    <Text style={styles.billingTitle}>{formatDisplayDate(todayKey)}</Text>
+                <View style={styles.billingCard}>
+                  <View style={styles.billingHeader}>
+                    <View>
+                      <Text style={styles.billingTodayLabel}>Generated date</Text>
+                      <Text style={styles.billingTitle}>{formatDisplayDate(todayKey)}</Text>
+                    </View>
                   </View>
-                </View>
 
-                <View style={styles.billingFilterRow}>
-                  <Pressable style={styles.billingFilterField} onPress={() => openBillingPicker("from")}>
-                    <View style={styles.billingFilterBox}>
-                      <Text style={styles.billingFilterLabel}>From</Text>
-                      <Text
-                        style={[
-                          styles.billingFilterValue,
-                          !billingFromDate && styles.billingFilterPlaceholder
-                        ]}
-                      >
-                        {billingFromDate ? formatDisplayDate(billingFromDate) : "Select"}
-                      </Text>
-                    </View>
-                  </Pressable>
-
-                  <Pressable style={styles.billingFilterField} onPress={() => openBillingPicker("to")}>
-                    <View style={styles.billingFilterBox}>
-                      <Text style={styles.billingFilterLabel}>To</Text>
-                      <Text
-                        style={[
-                          styles.billingFilterValue,
-                          !billingToDate && styles.billingFilterPlaceholder
-                        ]}
-                      >
-                        {billingToDate ? formatDisplayDate(billingToDate) : "Select"}
-                      </Text>
-                    </View>
-                  </Pressable>
-                </View>
-
-                {billingPickerTarget ? (
-                  <Pressable onPress={() => {}}>
-                  <View style={styles.billingPickerCard}>
-                    <View style={styles.calendarHeader}>
-                      <Pressable
-                        onPress={() =>
-                          setBillingPickerMonth(
-                            (current) => new Date(current.getFullYear(), current.getMonth() - 1, 1)
-                          )
-                        }
-                      >
-                        <View style={styles.calendarNavButton}>
-                          <CalendarPreviousIcon />
-                        </View>
-                      </Pressable>
-
-                      <Text style={styles.calendarTitle}>
-                        {monthLabels[billingPickerMonth.getMonth()]} {billingPickerMonth.getFullYear()}
-                      </Text>
-
-                      <Pressable
-                        onPress={() =>
-                          setBillingPickerMonth(
-                            (current) => new Date(current.getFullYear(), current.getMonth() + 1, 1)
-                          )
-                        }
-                      >
-                        <View style={styles.calendarNavButton}>
-                          <CalendarNextIcon />
-                        </View>
-                      </Pressable>
-                    </View>
-
-                    <View style={styles.weekdayRow}>
-                      {weekdayLabels.map((label, index) => (
-                        <Text key={`billing-${label}-${index}`} style={styles.weekdayLabel}>
-                          {label}
+                  <View style={styles.billingFilterRow}>
+                    <Pressable style={styles.billingFilterField} onPress={() => openBillingPicker("from")}>
+                      <View style={styles.billingFilterBox}>
+                        <Text style={styles.billingFilterLabel}>From</Text>
+                        <Text
+                          style={[
+                            styles.billingFilterValue,
+                            !billingFromDate && styles.billingFilterPlaceholder
+                          ]}
+                        >
+                          {billingFromDate ? formatDisplayDate(billingFromDate) : "dd/mm/yyyy"}
                         </Text>
-                      ))}
-                    </View>
+                      </View>
+                    </Pressable>
 
-                    <View style={styles.dayGrid}>
-                      {billingPickerDays.map((date) => {
-                        const dateKey = formatDateKey(date);
-                        const isCurrentMonth = date.getMonth() === billingPickerMonth.getMonth();
-                        const isSelected =
-                          dateKey === billingFromDate || dateKey === billingToDate;
-                        const isToday = dateKey === todayKey;
-                        const isFutureDate = isFutureDateKey(dateKey, todayKey);
+                    <Pressable style={styles.billingFilterField} onPress={() => openBillingPicker("to")}>
+                      <View style={styles.billingFilterBox}>
+                        <Text style={styles.billingFilterLabel}>To</Text>
+                        <Text
+                          style={[
+                            styles.billingFilterValue,
+                            !billingToDate && styles.billingFilterPlaceholder
+                          ]}
+                        >
+                          {billingToDate ? formatDisplayDate(billingToDate) : "dd/mm/yyyy"}
+                        </Text>
+                      </View>
+                    </Pressable>
+                  </View>
 
-                        return (
+                  {billingPickerTarget ? (
+                    <Pressable onPress={() => { }}>
+                      <View style={styles.billingPickerCard}>
+                        <View style={styles.calendarHeader}>
                           <Pressable
-                            key={`billing-picker-${dateKey}`}
-                            style={styles.dayPressable}
-                            disabled={isFutureDate}
-                            onPress={() => handleBillingDatePick(dateKey)}
+                            onPress={() =>
+                              setBillingPickerMonth(
+                                (current) => new Date(current.getFullYear(), current.getMonth() - 1, 1)
+                              )
+                            }
                           >
-                            <View
-                              style={[
-                                styles.dayCell,
-                                !isCurrentMonth && styles.dayCellMuted,
-                                isFutureDate && styles.dayCellDisabled,
-                                isSelected && styles.dayCellSelected,
-                                isToday && !isSelected && styles.dayCellToday
-                              ]}
-                            >
-                              <Text
-                                style={[
-                                  styles.dayLabel,
-                                  (!isCurrentMonth || isFutureDate) && styles.dayLabelMuted,
-                                  isSelected && styles.dayLabelSelected
-                                ]}
-                              >
-                                {date.getDate()}
-                              </Text>
+                            <View style={styles.calendarNavButton}>
+                              <CalendarPreviousIcon />
                             </View>
                           </Pressable>
-                        );
-                      })}
-                    </View>
-                  </View>
-                  </Pressable>
-                ) : null}
 
-                {billingEditMode ? (
-                  <Text style={styles.billingEditHint}>
-                    Edit the wage and days cells in the table to adjust totals for this date range.
-                  </Text>
-                ) : null}
+                          <Text style={styles.calendarTitle}>
+                            {monthLabels[billingPickerMonth.getMonth()]} {billingPickerMonth.getFullYear()}
+                          </Text>
 
-                <View style={styles.billingActionRow}>
-                  <Text style={styles.billingActionLabel}>Monthly wage table</Text>
-                  <View style={styles.billingActionButtons}>
-                    <Pressable
-                      accessibilityLabel={billingEditMode ? "Finish editing billing" : "Edit billing"}
-                      title={billingEditMode ? "Done" : "Edit"}
-                      onPress={() => setBillingEditMode((current) => !current)}
-                      style={({ hovered, pressed }) => [
-                        styles.workerEditButton,
-                        billingEditMode && styles.billingEditButtonActive,
-                        hovered && styles.workerEditButtonHover,
-                        pressed && styles.workerEditButtonPressed
-                      ]}
-                    >
-                      <PencilEditIcon />
+                          <Pressable
+                            onPress={() =>
+                              setBillingPickerMonth(
+                                (current) => new Date(current.getFullYear(), current.getMonth() + 1, 1)
+                              )
+                            }
+                          >
+                            <View style={styles.calendarNavButton}>
+                              <CalendarNextIcon />
+                            </View>
+                          </Pressable>
+                        </View>
+
+                        <View style={styles.weekdayRow}>
+                          {weekdayLabels.map((label, index) => (
+                            <Text key={`billing-${label}-${index}`} style={styles.weekdayLabel}>
+                              {label}
+                            </Text>
+                          ))}
+                        </View>
+
+                        <View style={styles.dayGrid}>
+                          {billingPickerDays.map((date) => {
+                            const dateKey = formatDateKey(date);
+                            const isCurrentMonth = date.getMonth() === billingPickerMonth.getMonth();
+                            const isSelected =
+                              dateKey === billingFromDate || dateKey === billingToDate;
+                            const isToday = dateKey === todayKey;
+                            const isFutureDate = isFutureDateKey(dateKey, todayKey);
+
+                            return (
+                              <Pressable
+                                key={`billing-picker-${dateKey}`}
+                                style={styles.dayPressable}
+                                disabled={isFutureDate}
+                                onPress={() => handleBillingDatePick(dateKey)}
+                              >
+                                <View
+                                  style={[
+                                    styles.dayCell,
+                                    !isCurrentMonth && styles.dayCellMuted,
+                                    isFutureDate && styles.dayCellDisabled,
+                                    isSelected && styles.dayCellSelected,
+                                    isToday && !isSelected && styles.dayCellToday
+                                  ]}
+                                >
+                                  <Text
+                                    style={[
+                                      styles.dayLabel,
+                                      (!isCurrentMonth || isFutureDate) && styles.dayLabelMuted,
+                                      isSelected && styles.dayLabelSelected
+                                    ]}
+                                  >
+                                    {date.getDate()}
+                                  </Text>
+                                </View>
+                              </Pressable>
+                            );
+                          })}
+                        </View>
+                      </View>
                     </Pressable>
-                  </View>
-                </View>
+                  ) : null}
 
-                <View style={styles.billingTable}>
-                  <View style={styles.billingTableHeader}>
-                    <Text style={[styles.billingHeaderCell, styles.billingNameCell]}>Name</Text>
-                    <Text style={[styles.billingHeaderCell, styles.billingWageCell]}>Wage</Text>
-                    <Text style={[styles.billingHeaderCell, styles.billingDaysCell]}>Days</Text>
-                    <Text style={[styles.billingHeaderCell, styles.billingAmountCell]}>Total</Text>
-                  </View>
+                  {billingEditMode ? (
+                    <Text style={styles.billingEditHint}>
+                      Edit the wage and days cells in the table to adjust totals for this date range.
+                    </Text>
+                  ) : null}
 
-                  {loadingBilling ? (
-                    <View style={styles.billingState}>
-                      <ActivityIndicator color={palette.blue700} />
-                      <Text style={styles.billingStateText}>Loading billing...</Text>
-                    </View>
-                  ) : displayBillingRows.length === 0 ? (
-                    <View style={styles.billingState}>
-                      <Text style={styles.billingStateText}>
-                        {hasBillingFilter
-                          ? "No billing data for this date range yet."
-                          : "Select From and To dates to generate a bill."}
-                      </Text>
-                    </View>
-                  ) : (
-                    displayBillingRows.map((worker) => (
-                      <View
-                        key={worker.id}
-                        style={[
-                          styles.billingTableRow,
-                          billingEditMode && styles.billingTableRowEditing
+                  <View style={styles.billingActionRow}>
+                    <Text style={styles.billingActionLabel}>Monthly wage table</Text>
+                    <View style={styles.billingActionButtons}>
+                      <Pressable
+                        accessibilityLabel={billingEditMode ? "Finish editing billing" : "Edit billing"}
+                        title={billingEditMode ? "Done" : "Edit"}
+                        onPress={() => setBillingEditMode((current) => !current)}
+                        style={({ hovered, pressed }) => [
+                          styles.workerEditButton,
+                          billingEditMode && styles.billingEditButtonActive,
+                          hovered && styles.workerEditButtonHover,
+                          pressed && styles.workerEditButtonPressed
                         ]}
                       >
-                        <Text
-                          style={[styles.billingCell, styles.billingNameCell]}
-                          numberOfLines={1}
-                          ellipsizeMode="tail"
-                        >
-                          {worker.name}
+                        <PencilEditIcon />
+                      </Pressable>
+                    </View>
+                  </View>
+
+                  <View style={styles.billingTable}>
+                    <View style={styles.billingTableHeader}>
+                      <Text style={[styles.billingHeaderCell, styles.billingNameCell]}>Name</Text>
+                      <Text style={[styles.billingHeaderCell, styles.billingWageCell]}>Wage</Text>
+                      <Text style={[styles.billingHeaderCell, styles.billingDaysCell]}>Days</Text>
+                      <Text style={[styles.billingHeaderCell, styles.billingAmountCell]}>Total</Text>
+                    </View>
+
+                    {loadingBilling ? (
+                      <View style={styles.billingState}>
+                        <ActivityIndicator color={palette.blue700} />
+                        <Text style={styles.billingStateText}>Loading billing...</Text>
+                      </View>
+                    ) : displayBillingRows.length === 0 ? (
+                      <View style={styles.billingState}>
+                        <Text style={styles.billingStateText}>
+                          {hasBillingFilter
+                            ? "No billing data for this date range yet."
+                            : "Select From and To dates to generate a bill."}
                         </Text>
+                      </View>
+                    ) : (
+                      displayBillingRows.map((worker) => (
+                        <View
+                          key={worker.id}
+                          style={[
+                            styles.billingTableRow,
+                            billingEditMode && styles.billingTableRowEditing
+                          ]}
+                        >
+                          <Text
+                            style={[styles.billingCell, styles.billingNameCell]}
+                            numberOfLines={1}
+                            ellipsizeMode="tail"
+                          >
+                            {worker.name}
+                          </Text>
 
-                        {billingEditMode ? (
-                          <View style={styles.billingEditFieldsRow}>
-                            <View style={styles.billingEditField}>
-                              <Text style={styles.billingEditFieldLabel}>Wage</Text>
-                              <TextInput
-                                value={String(billingDrafts[worker.id]?.wage ?? worker.displayWage)}
-                                onChangeText={(value) =>
-                                  updateBillingWorkerField(worker.id, "wage", value)
-                                }
-                                style={[styles.billingCell, styles.billingInput]}
-                                keyboardType="decimal-pad"
-                                placeholder="0"
-                                placeholderTextColor="#87A0BF"
-                              />
+                          {billingEditMode ? (
+                            <View style={styles.billingEditFieldsRow}>
+                              <View style={styles.billingEditField}>
+                                <Text style={styles.billingEditFieldLabel}>Wage</Text>
+                                <TextInput
+                                  value={String(billingDrafts[worker.id]?.wage ?? worker.displayWage)}
+                                  onChangeText={(value) =>
+                                    updateBillingWorkerField(worker.id, "wage", value)
+                                  }
+                                  style={[styles.billingCell, styles.billingInput]}
+                                  keyboardType="decimal-pad"
+                                  placeholder="0"
+                                  placeholderTextColor="#87A0BF"
+                                />
+                              </View>
+
+                              <View style={styles.billingEditFieldSmall}>
+                                <Text style={styles.billingEditFieldLabel}>Days</Text>
+                                <TextInput
+                                  value={String(billingDrafts[worker.id]?.days ?? worker.displayDays)}
+                                  onChangeText={(value) =>
+                                    updateBillingWorkerField(worker.id, "days", value)
+                                  }
+                                  style={[styles.billingCell, styles.billingInput]}
+                                  keyboardType="decimal-pad"
+                                  placeholder="0"
+                                  placeholderTextColor="#87A0BF"
+                                />
+                              </View>
+
+                              <View style={styles.billingEditTotalBlock}>
+                                <Text style={styles.billingEditFieldLabel}>Total</Text>
+                                <Text style={[styles.billingCell, styles.billingEditTotalValue]}>
+                                  {worker.totalWage}
+                                </Text>
+                              </View>
                             </View>
-
-                            <View style={styles.billingEditFieldSmall}>
-                              <Text style={styles.billingEditFieldLabel}>Days</Text>
-                              <TextInput
-                                value={String(billingDrafts[worker.id]?.days ?? worker.displayDays)}
-                                onChangeText={(value) =>
-                                  updateBillingWorkerField(worker.id, "days", value)
-                                }
-                                style={[styles.billingCell, styles.billingInput]}
-                                keyboardType="decimal-pad"
-                                placeholder="0"
-                                placeholderTextColor="#87A0BF"
-                              />
-                            </View>
-
-                            <View style={styles.billingEditTotalBlock}>
-                              <Text style={styles.billingEditFieldLabel}>Total</Text>
-                              <Text style={[styles.billingCell, styles.billingEditTotalValue]}>
+                          ) : (
+                            <>
+                              <Text style={[styles.billingCell, styles.billingWageCell]}>
+                                {worker.displayWage}
+                              </Text>
+                              <Text style={[styles.billingCell, styles.billingDaysCell]}>
+                                {worker.displayDays}
+                              </Text>
+                              <Text style={[styles.billingCell, styles.billingAmountCell]}>
                                 {worker.totalWage}
                               </Text>
-                            </View>
+                            </>
+                          )}
+                        </View>
+                      ))
+                    )}
+
+                    {!loadingBilling && displayBillingRows.length > 0 ? (
+                      <View style={styles.billingTotalRow}>
+                        <Text style={[styles.billingTotalText, styles.billingNameCell]}>
+                          Worker total
+                        </Text>
+                        <Text style={styles.billingWageCell} />
+                        <Text style={styles.billingDaysCell} />
+                        <Text style={[styles.billingTotalText, styles.billingAmountCell]}>
+                          {billingGrandTotal}
+                        </Text>
+                      </View>
+                    ) : null}
+                  </View>
+
+                  <View style={styles.expenseCard}>
+                    <View style={styles.expenseHeader}>
+                      <Text style={styles.expenseTitle}>Other expenses</Text>
+                      <View style={styles.billingActionButtons}>
+                        <Pressable onPress={addExpenseRow}>
+                          <View style={styles.manageBadge}>
+                            <ExpenseActionIcon action="add" />
                           </View>
-                        ) : (
-                          <>
-                            <Text style={[styles.billingCell, styles.billingWageCell]}>
-                              {worker.displayWage}
-                            </Text>
-                            <Text style={[styles.billingCell, styles.billingDaysCell]}>
-                              {worker.displayDays}
-                            </Text>
-                            <Text style={[styles.billingCell, styles.billingAmountCell]}>
-                              {worker.totalWage}
-                            </Text>
-                          </>
-                        )}
+                        </Pressable>
+
                       </View>
-                    ))
-                  )}
-
-                  {!loadingBilling && displayBillingRows.length > 0 ? (
-                    <View style={styles.billingTotalRow}>
-                      <Text style={[styles.billingTotalText, styles.billingNameCell]}>
-                        Worker total
-                      </Text>
-                      <Text style={styles.billingWageCell} />
-                      <Text style={styles.billingDaysCell} />
-                      <Text style={[styles.billingTotalText, styles.billingAmountCell]}>
-                        {billingGrandTotal}
-                      </Text>
                     </View>
-                  ) : null}
-                </View>
 
-                <View style={styles.expenseCard}>
-                  <View style={styles.expenseHeader}>
-                    <Text style={styles.expenseTitle}>Other expenses</Text>
-                    <View style={styles.billingActionButtons}>
-                      <Pressable onPress={addExpenseRow}>
-                        <View style={styles.manageBadge}>
-                          <ExpenseActionIcon action="add" />
+                    {extraExpenses.map((row, index) => (
+                      <View key={row.id} style={styles.expenseRow}>
+                        <View style={[styles.compactField, styles.expenseReasonField]}>
+                          <Text style={styles.compactLabel}>Reason {index + 1}</Text>
+                          <TextInput
+                            value={row.reason}
+                            onChangeText={(value) => updateExpenseRow(row.id, "reason", value)}
+                            placeholder="Transport, food, materials..."
+                            placeholderTextColor="#87A0BF"
+                            style={styles.compactInput}
+                          />
                         </View>
-                      </Pressable>
-                      <Pressable onPress={removeExpenseRow}>
-                        <View style={styles.manageBadge}>
-                          <ExpenseActionIcon action="remove" />
+                        <View style={[styles.compactField, styles.expenseAmountField]}>
+                          <Text style={styles.compactLabel}>Amount</Text>
+                          <TextInput
+                            value={row.amount}
+                            onChangeText={(value) => updateExpenseRow(row.id, "amount", value)}
+                            placeholder="0"
+                            placeholderTextColor="#87A0BF"
+                            style={styles.compactInput}
+                            keyboardType="numeric"
+                          />
                         </View>
-                      </Pressable>
+                        <Pressable
+                          onPress={() => removeExpenseRow(row.id)}
+                          style={({ hovered, pressed }) => [
+                            styles.expenseRemovePressable,
+                            hovered && styles.expenseRemovePressableHover,
+                            pressed && styles.expenseRemovePressablePressed
+                          ]}
+                        >
+                          <View style={styles.manageBadge}>
+                            <ExpenseActionIcon action="remove" />
+                          </View>
+                        </Pressable>
+                      </View>
+                    ))}
+                    <View style={styles.expenseFooter}>
+                      <View style={styles.expenseTotalBlock}>
+                        <Text style={styles.expenseFooterLabel}>Other expenses total</Text>
+                        <Text style={styles.expenseFooterAmount}>{extraExpensesTotal}</Text>
+                      </View>
                     </View>
                   </View>
 
-                  {extraExpenses.map((row, index) => (
-                    <View key={row.id} style={styles.expenseRow}>
-                      <View style={[styles.compactField, styles.expenseReasonField]}>
-                        <Text style={styles.compactLabel}>Reason {index + 1}</Text>
-                        <TextInput
-                          value={row.reason}
-                          onChangeText={(value) => updateExpenseRow(row.id, "reason", value)}
-                          placeholder="Transport, food, materials..."
-                          placeholderTextColor="#87A0BF"
-                          style={styles.compactInput}
-                        />
-                      </View>
-                      <View style={[styles.compactField, styles.expenseAmountField]}>
-                        <Text style={styles.compactLabel}>Amount</Text>
-                        <TextInput
-                          value={row.amount}
-                          onChangeText={(value) => updateExpenseRow(row.id, "amount", value)}
-                          placeholder="0"
-                          placeholderTextColor="#87A0BF"
-                          style={styles.compactInput}
-                          keyboardType="numeric"
-                        />
-                      </View>
-                    </View>
-                  ))}
-                  <View style={styles.expenseFooter}>
-                    <View style={styles.expenseTotalBlock}>
-                      <Text style={styles.expenseFooterLabel}>Other expenses total</Text>
-                      <Text style={styles.expenseFooterAmount}>{extraExpensesTotal}</Text>
-                    </View>
-                    <Pressable
-                      disabled={savingBillingToBackend}
-                      onPress={() => void handleSaveBillingToBackend()}
-                      style={({ hovered, pressed }) => [
-                        styles.updateBillButton,
-                        hovered && !savingBillingToBackend && styles.updateBillButtonHover,
-                        pressed && !savingBillingToBackend && styles.updateBillButtonPressed,
-                        savingBillingToBackend && styles.disabledButton
-                      ]}
-                    >
-                      <Text style={styles.updateBillButtonText}>
-                        {savingBillingToBackend ? "Generating..." : "Generate Bill"}
-                      </Text>
-                    </Pressable>
+                  <View style={styles.billingGrandCard}>
+                    <Text style={styles.billingGrandLabel}>Total payable amount</Text>
+                    <Text style={styles.billingGrandAmount}>{overallPayableTotal}</Text>
                   </View>
                 </View>
 
-                <View style={styles.billingGrandCard}>
-                  <Text style={styles.billingGrandLabel}>Total payable amount</Text>
-                  <Text style={styles.billingGrandAmount}>{overallPayableTotal}</Text>
-                </View>
-              </View>
+                <Pressable
+                  disabled={savingBillingToBackend}
+                  onPress={() => void handleSaveBillingToBackend()}
+                  style={({ hovered, pressed }) => [
+                    styles.updateBillButton,
+                    hovered && !savingBillingToBackend && styles.updateBillButtonHover,
+                    pressed && !savingBillingToBackend && styles.updateBillButtonPressed,
+                    savingBillingToBackend && styles.disabledButton
+                  ]}
+                >
+                  <Text style={styles.updateBillButtonText}>
+                    {savingBillingToBackend ? "Generating..." : "Generate Bill"}
+                  </Text>
+                </Pressable>
               </Pressable>
             ) : null}
 
@@ -2756,63 +2962,63 @@ function AttendanceHome({ displayName, token, onLogout }) {
 
                       {expandedGeneratedMonth === month.monthKey
                         ? month.bills.map((bill) => {
-                        const billKey = getGeneratedBillKey(bill);
-                        const isViewing = loadingGeneratedBillAction === `view-${billKey}`;
-                        const isDeleting = loadingGeneratedBillAction === `delete-${billKey}`;
+                          const billKey = getGeneratedBillKey(bill);
+                          const isViewing = loadingGeneratedBillAction === `view-${billKey}`;
+                          const isDeleting = loadingGeneratedBillAction === `delete-${billKey}`;
 
-                        return (
-                          <View key={billKey} style={styles.generatedBillRow}>
-                            <View style={styles.generatedBillInfo}>
-                              <Text style={styles.generatedBillDate}>{bill.displayDate}</Text>
-                              <Text style={styles.generatedBillMeta}>
-                                {bill.rangeDisplayDate && bill.rangeDisplayDate !== bill.displayDate
-                                  ? `Range: ${bill.rangeDisplayDate} | `
-                                  : ""}
-                                Workers: {bill.rows.length} | Total: {bill.totalAmount}
-                              </Text>
+                          return (
+                            <View key={billKey} style={styles.generatedBillRow}>
+                              <View style={styles.generatedBillInfo}>
+                                <Text style={styles.generatedBillDate}>{bill.displayDate}</Text>
+                                <Text style={styles.generatedBillMeta}>
+                                  {bill.rangeDisplayDate && bill.rangeDisplayDate !== bill.displayDate
+                                    ? `Range: ${bill.rangeDisplayDate} | `
+                                    : ""}
+                                  Workers: {bill.rows.length} | Total: {bill.totalAmount}
+                                </Text>
+                              </View>
+
+                              <View style={styles.generatedBillActions}>
+                                <Pressable
+                                  accessibilityRole="button"
+                                  accessibilityLabel={`Delete generated bill for ${bill.displayDate}`}
+                                  disabled={isDeleting || deletingGeneratedBills}
+                                  onPress={() => requestGeneratedBillDelete(bill)}
+                                  style={({ hovered, pressed }) => [
+                                    styles.generatedBillDeletePressable,
+                                    hovered && styles.generatedBillDeletePressableHover,
+                                    pressed && styles.generatedBillDeletePressablePressed
+                                  ]}
+                                >
+                                  {isDeleting ? (
+                                    <ActivityIndicator color={palette.danger} size="small" />
+                                  ) : (
+                                    <TrashIcon />
+                                  )}
+                                </Pressable>
+
+                                <Pressable
+                                  accessibilityRole="button"
+                                  accessibilityLabel="View generated bill"
+                                  disabled={isViewing}
+                                  onPress={() => handleViewGeneratedBill(billKey)}
+                                  style={({ hovered, pressed }) => [
+                                    styles.generatedBillActionPressable,
+                                    hovered && styles.generatedBillActionPressableHover,
+                                    pressed && styles.generatedBillActionPressablePressed,
+                                    isViewing && styles.generatedBillActionChipBusy
+                                  ]}
+                                >
+                                  {isViewing ? (
+                                    <ActivityIndicator color={palette.blue800} size="small" />
+                                  ) : (
+                                    <EyeIcon />
+                                  )}
+                                </Pressable>
+                              </View>
                             </View>
-
-                            <View style={styles.generatedBillActions}>
-                              <Pressable
-                                accessibilityRole="button"
-                                accessibilityLabel={`Delete generated bill for ${bill.displayDate}`}
-                                disabled={isDeleting || deletingGeneratedBills}
-                                onPress={() => requestGeneratedBillDelete(bill)}
-                                style={({ hovered, pressed }) => [
-                                  styles.generatedBillDeletePressable,
-                                  hovered && styles.generatedBillDeletePressableHover,
-                                  pressed && styles.generatedBillDeletePressablePressed
-                                ]}
-                              >
-                                {isDeleting ? (
-                                  <ActivityIndicator color={palette.danger} size="small" />
-                                ) : (
-                                  <TrashIcon />
-                                )}
-                              </Pressable>
-
-                              <Pressable
-                                accessibilityRole="button"
-                                accessibilityLabel="View generated bill"
-                                disabled={isViewing}
-                                onPress={() => handleViewGeneratedBill(billKey)}
-                                style={({ hovered, pressed }) => [
-                                  styles.generatedBillActionPressable,
-                                  hovered && styles.generatedBillActionPressableHover,
-                                  pressed && styles.generatedBillActionPressablePressed,
-                                  isViewing && styles.generatedBillActionChipBusy
-                                ]}
-                              >
-                                {isViewing ? (
-                                  <ActivityIndicator color={palette.blue800} size="small" />
-                                ) : (
-                                  <EyeIcon />
-                                )}
-                              </Pressable>
-                            </View>
-                          </View>
-                        );
-                      })
+                          );
+                        })
                         : null}
                     </View>
                   ))
@@ -2849,7 +3055,7 @@ function AttendanceHome({ displayName, token, onLogout }) {
                     hovered && styles.generatedPreviewActionButtonHover,
                     pressed && styles.generatedPreviewActionButtonPressed,
                     loadingGeneratedBillAction === `download-${getGeneratedBillKey(selectedGeneratedBill)}` &&
-                      styles.generatedBillActionChipBusy
+                    styles.generatedBillActionChipBusy
                   ]}
                 >
                   {loadingGeneratedBillAction === `download-${getGeneratedBillKey(selectedGeneratedBill)}` ? (
@@ -3003,6 +3209,37 @@ function AttendanceHome({ displayName, token, onLogout }) {
           </View>
         </View>
       ) : null}
+
+      {workerDeleteTarget ? (
+        <View style={styles.generatedPreviewOverlay}>
+          <Pressable style={styles.generatedPreviewBackdrop} onPress={cancelDeleteWorker} />
+          <View style={styles.generatedConfirmPopup}>
+            <Text style={styles.generatedConfirmTitle}>
+              Delete {workerDeleteTarget.name}?
+            </Text>
+            <Text style={styles.generatedConfirmText}>
+              Are you sure you want to delete this worker?
+            </Text>
+
+            <View style={styles.generatedConfirmActions}>
+              <Pressable disabled={isDeletingWorker} onPress={cancelDeleteWorker}>
+                <View style={styles.generatedConfirmSecondary}>
+                  <Text style={styles.generatedConfirmSecondaryText}>Cancel</Text>
+                </View>
+              </Pressable>
+
+              <Pressable disabled={isDeletingWorker} onPress={confirmDeleteWorker}>
+                <View style={[styles.generatedConfirmPrimary, isDeletingWorker && styles.disabledButton]}>
+                  <Text style={styles.generatedConfirmPrimaryText}>
+                    {isDeletingWorker ? "Deleting..." : "Confirm"}
+                  </Text>
+                </View>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      ) : null}
+
     </View>
   );
 }
@@ -3044,14 +3281,14 @@ export default function LoginScreen() {
       return;
     }
 
-      const nextSession = {
-        ...storedSession,
-        fullName: resolveDisplayName(storedSession)
-      };
+    const nextSession = {
+      ...storedSession,
+      fullName: resolveDisplayName(storedSession)
+    };
 
-      setSession(nextSession);
-      persistSession(nextSession);
-    }, []);
+    setSession(nextSession);
+    persistSession(nextSession);
+  }, []);
 
   const isFormReady = useMemo(() => {
     if (authMode === "register") {
@@ -3109,19 +3346,11 @@ export default function LoginScreen() {
         password
       });
 
-      const tokenName = decodeTokenName(result?.token || "");
-      const previousSession = readStoredSession();
       const nextSession = {
         token: result?.token || "",
-        mobile: mobile.trim(),
+        mobile: result?.user?.mobile || mobile.trim(),
         rememberMe: true,
-        fullName:
-          (tokenName && !isLikelyPhoneValue(tokenName) ? tokenName : "") ||
-          (previousSession?.fullName && !isLikelyPhoneValue(previousSession.fullName)
-            ? previousSession.fullName
-            : "") ||
-          getStoredUserName(mobile.trim()) ||
-          "User"
+        fullName: result?.user?.fullName || getStoredUserName(mobile.trim()) || "User"
       };
 
       setSession(nextSession);
@@ -3161,15 +3390,11 @@ export default function LoginScreen() {
         password
       });
 
-      const tokenName = decodeTokenName(result?.token || "");
       const nextSession = {
         token: result?.token || "",
-        mobile: mobile.trim(),
+        mobile: result?.user?.mobile || mobile.trim(),
         rememberMe: true,
-        fullName:
-          (tokenName && !isLikelyPhoneValue(tokenName) ? tokenName : "") ||
-          fullName.trim() ||
-          "User"
+        fullName: result?.user?.fullName || fullName.trim() || "User"
       };
 
       setSession(nextSession);
@@ -3319,42 +3544,13 @@ export default function LoginScreen() {
               />
 
               {!isResetOpen ? (
-                <AnimatedField
+                <PINEntry
                   label="Password"
-                  placeholder="Enter password"
                   value={password}
-                  secureTextEntry={!showPassword}
-                  inputStyle={styles.passwordInput}
-                  autoComplete="current-password"
-                  textContentType="password"
-                  returnKeyType="done"
                   onChangeText={(value) => {
                     setPassword(value);
                     setAuthNotice("");
                   }}
-                  onSubmitEditing={authMode === "register" ? handleRegister : handleLogin}
-                  rightAccessory={
-                    <Pressable
-                      accessibilityLabel={showPassword ? "Hide password" : "View password"}
-                      title={showPassword ? "Hide password" : "View password"}
-                      onPress={() => setShowPassword((current) => !current)}
-                      onPressIn={() => {
-                        passwordTogglePress.value = withTiming(1, { duration: 90 });
-                      }}
-                      onPressOut={() => {
-                        passwordTogglePress.value = withTiming(0, { duration: 120 });
-                      }}
-                      style={({ hovered, pressed }) => [
-                        styles.passwordToggle,
-                        hovered && styles.passwordToggleHover,
-                        pressed && styles.passwordTogglePressed
-                      ]}
-                    >
-                      <Animated.View style={passwordToggleStyle}>
-                        <EyeIcon hidden={!showPassword} />
-                      </Animated.View>
-                    </Pressable>
-                  }
                 />
               ) : (
                 <Animated.View entering={FadeInDown.duration(260)} style={styles.resetPanel}>
@@ -3368,67 +3564,24 @@ export default function LoginScreen() {
                     </Pressable>
                   </View>
 
-                  <AnimatedField
+                  <PINEntry
                     key={`reset-new-${resetFormKey}`}
                     label="New Password"
-                    placeholder="Enter new password"
                     value={resetNewPassword}
-                    secureTextEntry={!showResetNewPassword}
-                    inputStyle={styles.passwordInput}
-                    autoComplete="new-password"
-                    textContentType="newPassword"
-                    returnKeyType="next"
                     onChangeText={(value) => {
                       setResetNewPassword(value);
                       setResetMessage("");
                     }}
-                    rightAccessory={
-                      <Pressable
-                        accessibilityLabel={showResetNewPassword ? "Hide new password" : "View new password"}
-                        title={showResetNewPassword ? "Hide password" : "View password"}
-                        onPress={() => setShowResetNewPassword((current) => !current)}
-                        style={({ hovered, pressed }) => [
-                          styles.passwordToggle,
-                          hovered && styles.passwordToggleHover,
-                          pressed && styles.passwordTogglePressed
-                        ]}
-                      >
-                        <EyeIcon hidden={!showResetNewPassword} />
-                      </Pressable>
-                    }
                   />
 
-                  <AnimatedField
+                  <PINEntry
                     key={`reset-confirm-${resetFormKey}`}
                     label="Confirm New Password"
-                    placeholder="Re-enter new password"
                     value={resetConfirmPassword}
-                    secureTextEntry={!showResetConfirmPassword}
-                    inputStyle={styles.passwordInput}
-                    autoComplete="new-password"
-                    textContentType="newPassword"
-                    returnKeyType="done"
                     onChangeText={(value) => {
                       setResetConfirmPassword(value);
                       setResetMessage("");
                     }}
-                    onSubmitEditing={handleResetPassword}
-                    rightAccessory={
-                      <Pressable
-                        accessibilityLabel={
-                          showResetConfirmPassword ? "Hide confirm password" : "View confirm password"
-                        }
-                        title={showResetConfirmPassword ? "Hide password" : "View password"}
-                        onPress={() => setShowResetConfirmPassword((current) => !current)}
-                        style={({ hovered, pressed }) => [
-                          styles.passwordToggle,
-                          hovered && styles.passwordToggleHover,
-                          pressed && styles.passwordTogglePressed
-                        ]}
-                      >
-                        <EyeIcon hidden={!showResetConfirmPassword} />
-                      </Pressable>
-                    }
                   />
 
                   {resetPasswordMismatch ? (
@@ -3951,6 +4104,103 @@ const styles = StyleSheet.create({
   },
   workerSubmitPressablePressed: {
     transform: [{ scale: 0.97 }]
+  },
+  workerActions: {
+    flexDirection: "row",
+    gap: 10,
+    alignItems: "center"
+  },
+  workerDeleteButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 15,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 10,
+    backgroundColor: "rgba(210, 75, 90, 0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(210, 75, 90, 0.12)",
+    shadowColor: palette.danger,
+    shadowOpacity: 0.02,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 1,
+    cursor: "pointer",
+    transform: [{ scale: 1 }],
+    transitionProperty: "background-color, box-shadow, transform, border-color",
+    transitionDuration: "0.18s",
+    transitionTimingFunction: "ease"
+  },
+  workerDeleteButtonHover: {
+    backgroundColor: "rgba(210, 75, 90, 0.14)",
+    borderColor: "rgba(210, 75, 90, 0.2)",
+    shadowOpacity: 0.08,
+    shadowRadius: 14,
+    transform: [{ scale: 1.06 }]
+  },
+  workerDeleteButtonPressed: {
+    transform: [{ scale: 0.97 }]
+  },
+  workerFormActions: {
+    flexDirection: "row",
+    gap: 12,
+    marginTop: 16
+  },
+  workerDeleteFormPressable: {
+    flex: 0.45,
+    borderRadius: 18,
+    transform: [{ scale: 1 }],
+    transitionProperty: "opacity, transform",
+    transitionDuration: "0.18s",
+    transitionTimingFunction: "ease"
+  },
+  workerDeleteFormPressableHover: {
+    transform: [{ scale: 1.025 }]
+  },
+  workerDeleteFormPressablePressed: {
+    transform: [{ scale: 0.97 }]
+  },
+  workerClosePressable: {
+    flex: 0.35,
+    borderRadius: 18,
+    transform: [{ scale: 1 }],
+    transitionProperty: "opacity, transform",
+    transitionDuration: "0.18s",
+    transitionTimingFunction: "ease"
+  },
+  workerClosePressableHover: {
+    transform: [{ scale: 1.025 }]
+  },
+  workerClosePressablePressed: {
+    transform: [{ scale: 0.97 }]
+  },
+  dangerButton: {
+    minHeight: 52,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(210, 75, 90, 0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(210, 75, 90, 0.16)",
+    shadowColor: palette.danger,
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2
+  },
+  tertiaryButton: {
+    minHeight: 52,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#F5F7FA",
+    borderWidth: 1,
+    borderColor: "#E0E5EC",
+    shadowColor: "#000",
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 1
   },
   checkActionIcon: {
     width: 30,
@@ -4945,7 +5195,8 @@ const styles = StyleSheet.create({
   billingTable: {
     borderRadius: 18,
     overflow: "hidden",
-    backgroundColor: palette.surface
+    backgroundColor: palette.surface,
+    marginBottom: 14
   },
   billingTableHeader: {
     flexDirection: "row",
@@ -5069,7 +5320,7 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     paddingHorizontal: 16,
     paddingVertical: 14,
-    backgroundColor: palette.blue700,
+    backgroundColor: palette.blue500,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between"
@@ -5607,5 +5858,16 @@ const styles = StyleSheet.create({
     color: "#F7FBFF",
     fontSize: 14,
     fontWeight: "800"
-  }
+  },
+  expenseRemovePressable: {
+    alignSelf: "flex-end",
+    marginBottom: 4,
+    marginLeft: 4,
+  },
+  expenseRemovePressableHover: {
+    opacity: 0.75,
+  },
+  expenseRemovePressablePressed: {
+    opacity: 0.5,
+  },
 });

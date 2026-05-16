@@ -83,6 +83,13 @@ export function editWorker(workerId, payload, token) {
   });
 }
 
+export function deleteWorker(workerId, token) {
+  return request(`/worker/delete/${encodeURIComponent(workerId)}`, {
+    method: "DELETE",
+    token
+  });
+}
+
 export function storeBill(payload, token) {
   return request("/bill/store", {
     method: "POST",

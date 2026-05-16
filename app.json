@@ -23,7 +23,7 @@
         "foregroundImage": "./assets/icon.png",
         "backgroundColor": "#F7FBFF"
       },
-      "package": "com.employee.management"
+      "package": "com.employee.management.markmate"
     },
     "plugins": [
       "expo-router"
