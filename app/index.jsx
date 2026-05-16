@@ -58,6 +58,9 @@ import {
   storeBill
 } from "../src/api";
 import { PINEntry } from "./components/PINEntry";
+import * as FileSystem from "expo-file-system";
+import * as Sharing from "expo-sharing";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const palette = {
   bg: "#F7FBFF",
@@ -740,28 +743,40 @@ function readStoredSession() {
   }
 }
 
-function persistSession(session) {
-  try {
-    if (!globalThis.localStorage) {
-      return;
-    }
+// function persistSession(session) {
+//   try {
+//     if (!globalThis.localStorage) {
+//       return;
+//     }
 
-    globalThis.localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session));
-  } catch {
-    // Ignore storage failures and continue with in-memory session.
-  }
+//     globalThis.localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session));
+//   } catch {
+//     // Ignore storage failures and continue with in-memory session.
+//   }
+// }
+
+// function clearPersistedSession() {
+//   try {
+//     if (!globalThis.localStorage) {
+//       return;
+//     }
+
+//     globalThis.localStorage.removeItem(SESSION_STORAGE_KEY);
+//   } catch {
+//     // Ignore storage failures during logout cleanup.
+//   }
+// }
+
+async function persistSession(session) {
+  try {
+    await AsyncStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session));
+  } catch { }
 }
 
-function clearPersistedSession() {
+async function clearPersistedSession() {
   try {
-    if (!globalThis.localStorage) {
-      return;
-    }
-
-    globalThis.localStorage.removeItem(SESSION_STORAGE_KEY);
-  } catch {
-    // Ignore storage failures during logout cleanup.
-  }
+    await AsyncStorage.removeItem(SESSION_STORAGE_KEY);
+  } catch { }
 }
 
 function readStoredUserNames() {
@@ -1383,10 +1398,10 @@ function AttendanceHome({ displayName, token, onLogout }) {
   // }
 
   async function downloadGeneratedBillFile(bill) {
-    const filename = `bill-${bill.displayDate}.png`;
+    const filename = `bill-${bill.displayDate}.svg`;
     const svgMarkup = buildBillImageSvg(bill, displayName);
 
-    // WEB path — unchanged
+    // WEB path
     if (Platform.OS === "web" && globalThis.document && globalThis.URL && globalThis.Image) {
       const svgBlob = new Blob([svgMarkup], { type: "image/svg+xml;charset=utf-8" });
       const svgUrl = globalThis.URL.createObjectURL(svgBlob);
@@ -1399,17 +1414,14 @@ function AttendanceHome({ displayName, token, onLogout }) {
             canvas.width = image.width;
             canvas.height = image.height;
             const context = canvas.getContext("2d");
-
             if (!context) throw new Error("Canvas is not available for image export.");
-
             context.fillStyle = "#F7FBFF";
             context.fillRect(0, 0, canvas.width, canvas.height);
             context.drawImage(image, 0, 0);
-
             const pngUrl = canvas.toDataURL("image/png");
             const link = globalThis.document.createElement("a");
             link.href = pngUrl;
-            link.download = filename;
+            link.download = `bill-${bill.displayDate}.png`;
             globalThis.document.body.appendChild(link);
             link.click();
             globalThis.document.body.removeChild(link);
@@ -1428,31 +1440,23 @@ function AttendanceHome({ displayName, token, onLogout }) {
       });
     }
 
-    // MOBILE path — SVG saved as file and shared
-    try {
-      const FileSystem = await import("expo-file-system");
-      const Sharing = await import("expo-sharing");
+    // MOBILE path
+    const svgPath = `${FileSystem.cacheDirectory}${filename}`;
+    await FileSystem.writeAsStringAsync(svgPath, svgMarkup, {
+      encoding: FileSystem.EncodingType.UTF8
+    });
 
-      const svgPath = `${FileSystem.cacheDirectory}${filename.replace(".png", ".svg")}`;
-      await FileSystem.writeAsStringAsync(svgPath, svgMarkup, {
-        encoding: FileSystem.EncodingType.UTF8
-      });
-
-      const isAvailable = await Sharing.isAvailableAsync();
-      if (!isAvailable) {
-        throw new Error("Sharing is not available on this device.");
-      }
-
-      await Sharing.shareAsync(svgPath, {
-        mimeType: "image/svg+xml",
-        dialogTitle: `Bill ${bill.displayDate}`,
-        UTI: "public.svg-image"
-      });
-    } catch (error) {
-      throw new Error(error.message || "Failed to share bill on mobile.");
+    const isAvailable = await Sharing.isAvailableAsync();
+    if (!isAvailable) {
+      throw new Error("Sharing is not available on this device.");
     }
-  }
 
+    await Sharing.shareAsync(svgPath, {
+      mimeType: "image/svg+xml",
+      dialogTitle: `Bill ${bill.displayDate}`,
+      UTI: "public.svg-image"
+    });
+  }
   async function handleViewGeneratedBill(billKey) {
     setLoadingGeneratedBillAction(`view-${billKey}`);
     setErrorMessage("");
@@ -3269,25 +3273,54 @@ export default function LoginScreen() {
   const checkboxPress = useSharedValue(0);
   const passwordTogglePress = useSharedValue(0);
 
+  // useEffect(() => {
+  //   const storedSession = readStoredSession();
+
+  //   if (!storedSession) {
+  //     return;
+  //   }
+
+  //   if (isTokenExpired(storedSession.token)) {
+  //     clearPersistedSession();
+  //     return;
+  //   }
+
+  //   const nextSession = {
+  //     ...storedSession,
+  //     fullName: resolveDisplayName(storedSession)
+  //   };
+
+  //   setSession(nextSession);
+  //   persistSession(nextSession);
+  // }, []);
+
+
   useEffect(() => {
-    const storedSession = readStoredSession();
+    async function restoreSession() {
+      try {
+        const raw = await AsyncStorage.getItem(SESSION_STORAGE_KEY);
+        if (!raw) return;
 
-    if (!storedSession) {
-      return;
+        const parsed = JSON.parse(raw);
+        if (!parsed?.token) return;
+
+        if (isTokenExpired(parsed.token)) {
+          await AsyncStorage.removeItem(SESSION_STORAGE_KEY);
+          return;
+        }
+
+        const nextSession = {
+          ...parsed,
+          fullName: parsed.fullName || resolveDisplayName(parsed)
+        };
+
+        setSession(nextSession);
+      } catch {
+        // ignore
+      }
     }
 
-    if (isTokenExpired(storedSession.token)) {
-      clearPersistedSession();
-      return;
-    }
-
-    const nextSession = {
-      ...storedSession,
-      fullName: resolveDisplayName(storedSession)
-    };
-
-    setSession(nextSession);
-    persistSession(nextSession);
+    restoreSession();
   }, []);
 
   const isFormReady = useMemo(() => {
@@ -3355,7 +3388,7 @@ export default function LoginScreen() {
 
       setSession(nextSession);
       persistUserName(nextSession.mobile, nextSession.fullName);
-      persistSession(nextSession);
+      await persistSession(nextSession);
     } catch (error) {
       const message = error.message || "Login failed";
       setErrorMessage(message);
@@ -3399,7 +3432,7 @@ export default function LoginScreen() {
 
       setSession(nextSession);
       persistUserName(nextSession.mobile, nextSession.fullName);
-      persistSession(nextSession);
+      await persistSession(nextSession);
     } catch (error) {
       setErrorMessage(error.message || "Registration failed");
     } finally {
@@ -3466,8 +3499,8 @@ export default function LoginScreen() {
       <AttendanceHome
         displayName={resolveDisplayName(session)}
         token={session.token}
-        onLogout={() => {
-          clearPersistedSession();
+        onLogout={async() => {
+          await clearPersistedSession();
           setSession(null);
           setAuthMode("login");
           setPassword("");
