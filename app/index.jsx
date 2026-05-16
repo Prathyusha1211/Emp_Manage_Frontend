@@ -1353,17 +1353,17 @@ function AttendanceHome({ displayName, token, onLogout }) {
       });
     }
 
-    // MOBILE path - Save SVG file and share it
+    // MOBILE path - Save SVG to cache and share it
     try {
       const svgFilename = `bill-${bill.displayDate}.svg`;
-      const documentsDir = FileSystem.documentDirectory;
-      if (!documentsDir) {
-        throw new Error("Cannot access documents directory.");
+      const cacheDir = FileSystem.cacheDirectory;
+      if (!cacheDir) {
+        throw new Error("Cannot access file system on this device.");
       }
 
-      const svgPath = `${documentsDir}${svgFilename}`;
+      const svgPath = `${cacheDir}${svgFilename}`;
       
-      // Write SVG file to documents directory
+      // Write SVG file to cache directory
       await FileSystem.writeAsStringAsync(svgPath, svgMarkup, {
         encoding: FileSystem.EncodingType.UTF8
       });
@@ -1371,19 +1371,17 @@ function AttendanceHome({ displayName, token, onLogout }) {
       // Check if sharing is available
       const isAvailable = await Sharing.isAvailableAsync();
       if (!isAvailable) {
-        // If sharing not available, still notify that file was saved
-        setErrorMessage(`Bill saved to: ${svgPath}`);
-        return;
+        throw new Error("Share feature is not available on this device. Please try again.");
       }
 
-      // Share the file
+      // Open share sheet - user can save to gallery, email, drive, etc.
       await Sharing.shareAsync(svgPath, {
         mimeType: "image/svg+xml",
         dialogTitle: `Share Bill - ${bill.displayDate}`,
         UTI: "public.svg-image"
       });
     } catch (error) {
-      throw new Error(`Failed to export bill: ${error.message || "Unknown error"}`);
+      throw new Error(`Failed to save bill: ${error.message || "Unknown error"}`);
     }
   }
   async function handleViewGeneratedBill(billKey) {
@@ -1408,10 +1406,10 @@ function AttendanceHome({ displayName, token, onLogout }) {
       const bill = await getGeneratedBillForKey(billKey);
       await downloadGeneratedBillFile(bill);
       
-      // Show success message on mobile when file is saved
+      // Show success message on mobile with instructions
       if (Platform.OS !== "web") {
-        setErrorMessage(`✓ Bill saved successfully! Check your downloads or share options.`);
-        setTimeout(() => setErrorMessage(""), 3000);
+        setErrorMessage(`✓ Bill ready! Use the share menu to save to gallery, email, or drive.`);
+        setTimeout(() => setErrorMessage(""), 4000);
       }
     } catch (error) {
       setErrorMessage(error.message || "Failed to download generated bill.");
