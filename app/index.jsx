@@ -6,7 +6,6 @@ import {
   Platform,
   Pressable,
   ScrollView,
-  Share,
   StyleSheet,
   Text,
   TextInput,
@@ -59,9 +58,9 @@ import {
   storeBill
 } from "../src/api";
 import { PINEntry } from "./components/PINEntry";
-import * as FileSystem from "expo-file-system";
-import * as Sharing from "expo-sharing";
+import * as MediaLibrary from "expo-media-library";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { captureRef } from "react-native-view-shot";
 
 const palette = {
   bg: "#F7FBFF",
@@ -687,13 +686,9 @@ function isTokenExpired(token) {
   return payload.exp * 1000 <= Date.now();
 }
 
-function readStoredSession() {
+async function readStoredSession() {
   try {
-    if (!globalThis.localStorage) {
-      return null;
-    }
-
-    const raw = globalThis.localStorage.getItem(SESSION_STORAGE_KEY);
+    const raw = await AsyncStorage.getItem(SESSION_STORAGE_KEY);
     if (!raw) {
       return null;
     }
@@ -704,30 +699,6 @@ function readStoredSession() {
     return null;
   }
 }
-
-// function persistSession(session) {
-//   try {
-//     if (!globalThis.localStorage) {
-//       return;
-//     }
-
-//     globalThis.localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session));
-//   } catch {
-//     // Ignore storage failures and continue with in-memory session.
-//   }
-// }
-
-// function clearPersistedSession() {
-//   try {
-//     if (!globalThis.localStorage) {
-//       return;
-//     }
-
-//     globalThis.localStorage.removeItem(SESSION_STORAGE_KEY);
-//   } catch {
-//     // Ignore storage failures during logout cleanup.
-//   }
-// }
 
 async function persistSession(session) {
   try {
@@ -814,6 +785,27 @@ function EyeIcon({ hidden = false }) {
       color={palette.blue800}
       size={21}
     />
+  );
+}
+
+function PasswordVisibilityToggle({ visible, onPress, animatedStyle, onPressIn, onPressOut }) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={visible ? "Hide password" : "Show password"}
+      onPress={onPress}
+      onPressIn={onPressIn}
+      onPressOut={onPressOut}
+      style={({ hovered, pressed }) => [
+        styles.passwordToggle,
+        hovered && styles.passwordToggleHover,
+        pressed && styles.passwordTogglePressed
+      ]}
+    >
+      <Animated.View style={animatedStyle}>
+        <EyeIcon hidden={visible} />
+      </Animated.View>
+    </Pressable>
   );
 }
 
@@ -951,6 +943,92 @@ function BottomTabs({ activeTab, onChange }) {
   );
 }
 
+function GeneratedBillImage({ bill, contractorName }) {
+  const workerTotal = bill.workerTotal ?? bill.totalAmount;
+  const expenses = bill.extraExpenses || [];
+
+  return (
+    <View style={styles.billImageSheet}>
+      <View style={styles.billImageHeader}>
+        <View>
+          <Text style={styles.billImageEyebrow}>Generated Bill</Text>
+          <Text style={styles.billImageTitle}>{bill.displayDate}</Text>
+          {bill.rangeDisplayDate && bill.rangeDisplayDate !== bill.displayDate ? (
+            <Text style={styles.billImageMeta}>Range: {bill.rangeDisplayDate}</Text>
+          ) : null}
+        </View>
+        <View style={styles.billImageContractor}>
+          <Text style={styles.billImageEyebrow}>User</Text>
+          <Text style={styles.billImageContractorName}>{contractorName}</Text>
+        </View>
+      </View>
+
+      <View style={styles.billImageTable}>
+        <View style={styles.billImageTableHeader}>
+          <Text style={[styles.billImageHeaderCell, styles.billImageNumberCell]}>#</Text>
+          <Text style={[styles.billImageHeaderCell, styles.billImageNameCell]}>Worker</Text>
+          <Text style={[styles.billImageHeaderCell, styles.billImageSmallCell]}>Wage</Text>
+          <Text style={[styles.billImageHeaderCell, styles.billImageSmallCell]}>Days</Text>
+          <Text style={[styles.billImageHeaderCell, styles.billImageAmountCell]}>Total</Text>
+        </View>
+
+        {bill.rows.length ? (
+          bill.rows.map((worker, index) => (
+            <View key={worker.id || `${worker.name}-${index}`} style={styles.billImageTableRow}>
+              <Text style={[styles.billImageCell, styles.billImageNumberCell]}>{index + 1}</Text>
+              <Text style={[styles.billImageCell, styles.billImageNameCell]}>{worker.name}</Text>
+              <Text style={[styles.billImageCell, styles.billImageSmallCell]}>{worker.wage}</Text>
+              <Text style={[styles.billImageCell, styles.billImageSmallCell]}>{worker.days ?? "-"}</Text>
+              <Text style={[styles.billImageCell, styles.billImageAmountCell]}>{worker.total}</Text>
+            </View>
+          ))
+        ) : (
+          <View style={styles.billImageEmptyRow}>
+            <Text style={styles.billImageMuted}>No worker rows were saved for this bill.</Text>
+          </View>
+        )}
+      </View>
+
+      <View style={styles.billImageSummaryRow}>
+        <Text style={styles.billImageSummaryLabel}>Worker total</Text>
+        <Text style={styles.billImageSummaryValue}>{workerTotal}</Text>
+      </View>
+
+      <View style={styles.billImageTable}>
+        <View style={styles.billImageTableHeader}>
+          <Text style={[styles.billImageHeaderCell, styles.billImageNumberCell]}>#</Text>
+          <Text style={[styles.billImageHeaderCell, styles.billImageNameCell]}>Other expense</Text>
+          <Text style={[styles.billImageHeaderCell, styles.billImageAmountCell]}>Amount</Text>
+        </View>
+
+        {expenses.length ? (
+          expenses.map((expense, index) => (
+            <View key={expense.id || `${expense.reason}-${index}`} style={styles.billImageTableRow}>
+              <Text style={[styles.billImageCell, styles.billImageNumberCell]}>{index + 1}</Text>
+              <Text style={[styles.billImageCell, styles.billImageNameCell]}>{expense.reason}</Text>
+              <Text style={[styles.billImageCell, styles.billImageAmountCell]}>{expense.amount}</Text>
+            </View>
+          ))
+        ) : (
+          <View style={styles.billImageEmptyRow}>
+            <Text style={styles.billImageMuted}>No other expenses were saved for this bill.</Text>
+          </View>
+        )}
+      </View>
+
+      <View style={styles.billImageSummaryRow}>
+        <Text style={styles.billImageSummaryLabel}>Other expenses</Text>
+        <Text style={styles.billImageSummaryValue}>{bill.extraExpensesTotal || 0}</Text>
+      </View>
+
+      <View style={styles.billImageGrandTotal}>
+        <Text style={styles.billImageGrandTotalLabel}>Grand total</Text>
+        <Text style={styles.billImageGrandTotalValue}>{bill.totalAmount}</Text>
+      </View>
+    </View>
+  );
+}
+
 function AttendanceHome({ displayName, token, onLogout }) {
   const [activeTab, setActiveTab] = useState("attendance");
   const [selectedDate, setSelectedDate] = useState(() => formatDateKey(new Date()));
@@ -995,6 +1073,7 @@ function AttendanceHome({ displayName, token, onLogout }) {
   const [generatedMonthDeleteTarget, setGeneratedMonthDeleteTarget] = useState(null);
   const [generatedBillDeleteTarget, setGeneratedBillDeleteTarget] = useState(null);
   const expenseRowSequence = useRef(1);
+  const generatedBillImageRef = useRef(null);
   const [todayKey, setTodayKey] = useState(() => formatDateKey(new Date()));
 
   const calendarDays = useMemo(() => getMonthMatrix(calendarMonth), [calendarMonth]);
@@ -1260,63 +1339,9 @@ function AttendanceHome({ displayName, token, onLogout }) {
     }
   }
 
-  // function downloadGeneratedBillFile(bill) {
-  //   const filename = `bill-${bill.displayDate}.png`;
-
-  //   if (Platform.OS === "web" && globalThis.document && globalThis.URL && globalThis.Image) {
-  //     const svgMarkup = buildBillImageSvg(bill, displayName);
-  //     const svgBlob = new Blob([svgMarkup], { type: "image/svg+xml;charset=utf-8" });
-  //     const svgUrl = globalThis.URL.createObjectURL(svgBlob);
-
-  //     return new Promise((resolve, reject) => {
-  //       const image = new globalThis.Image();
-  //       image.onload = () => {
-  //         try {
-  //           const canvas = globalThis.document.createElement("canvas");
-  //           canvas.width = image.width;
-  //           canvas.height = image.height;
-  //           const context = canvas.getContext("2d");
-
-  //           if (!context) {
-  //             throw new Error("Canvas is not available for image export.");
-  //           }
-
-  //           context.fillStyle = "#F7FBFF";
-  //           context.fillRect(0, 0, canvas.width, canvas.height);
-  //           context.drawImage(image, 0, 0);
-
-  //           const pngUrl = canvas.toDataURL("image/png");
-  //           const link = globalThis.document.createElement("a");
-  //           link.href = pngUrl;
-  //           link.download = filename;
-  //           globalThis.document.body.appendChild(link);
-  //           link.click();
-  //           globalThis.document.body.removeChild(link);
-  //           globalThis.URL.revokeObjectURL(svgUrl);
-  //           resolve();
-  //         } catch (error) {
-  //           globalThis.URL.revokeObjectURL(svgUrl);
-  //           reject(error);
-  //         }
-  //       };
-
-  //       image.onerror = () => {
-  //         globalThis.URL.revokeObjectURL(svgUrl);
-  //         reject(new Error("Failed to generate bill image."));
-  //       };
-
-  //       image.src = svgUrl;
-  //     });
-  //   }
-
-  //   throw new Error("Image download is available in the browser build for now.");
-  // }
-
   async function downloadGeneratedBillFile(bill) {
-    const svgMarkup = buildBillImageSvg(bill, displayName);
-
-    // WEB path
     if (Platform.OS === "web" && globalThis.document && globalThis.URL && globalThis.Image) {
+      const svgMarkup = buildBillImageSvg(bill, displayName);
       const svgBlob = new Blob([svgMarkup], { type: "image/svg+xml;charset=utf-8" });
       const svgUrl = globalThis.URL.createObjectURL(svgBlob);
 
@@ -1354,22 +1379,25 @@ function AttendanceHome({ displayName, token, onLogout }) {
       });
     }
 
-    // MOBILE path - Share bill directly without file system
-    try {
-      const title = `Bill - ${bill.displayDate}`;
-      const billInfo = `${displayName}'s Bill\n\nDate: ${bill.displayDate}\nWorkers: ${bill.presentCount}\nTotal: ₹${bill.totalAmount}`;
-      
-      await Share.share({
-        message: billInfo,
-        title: title,
-        url: Platform.OS === "ios" ? svgMarkup : undefined // Share the bill info
-      });
-    } catch (error) {
-      // User dismissed share - this is not an error
-      if (error.message !== "User dismissed share dialog.") {
-        throw new Error(`Failed to share bill: ${error.message || "Please try again"}`);
-      }
+    if (!generatedBillImageRef.current) {
+      throw new Error("Open the bill preview before saving the image.");
     }
+
+    const permission = await MediaLibrary.requestPermissionsAsync();
+
+    if (!permission.granted) {
+      throw new Error("Photo permission is required to save the bill image.");
+    }
+
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+
+    const imageUri = await captureRef(generatedBillImageRef.current, {
+      format: "png",
+      quality: 1,
+      result: "tmpfile"
+    });
+
+    await MediaLibrary.saveToLibraryAsync(imageUri);
   }
   async function handleViewGeneratedBill(billKey) {
     setLoadingGeneratedBillAction(`view-${billKey}`);
@@ -1392,11 +1420,11 @@ function AttendanceHome({ displayName, token, onLogout }) {
     try {
       const bill = await getGeneratedBillForKey(billKey);
       await downloadGeneratedBillFile(bill);
-      
-      // Show success message on mobile with instructions
+
       if (Platform.OS !== "web") {
-        setErrorMessage(`✓ Bill ready! Use the share menu to save to gallery, email, or drive.`);
+        setErrorMessage("Bill image saved to your device gallery.");
         setTimeout(() => setErrorMessage(""), 4000);
+        return;
       }
     } catch (error) {
       setErrorMessage(error.message || "Failed to download generated bill.");
@@ -2031,7 +2059,7 @@ function AttendanceHome({ displayName, token, onLogout }) {
 
   function openBillingPicker(target) {
     const selectedDateKey = target === "from" ? billingFromDate : billingToDate;
-    const targetDate = selectedDateKey ? parseDateKey(selectedDateKey) : todayKey;
+    const targetDate = parseDateKey(selectedDateKey || todayKey);
 
     setBillingPickerTarget(target);
     setBillingPickerMonth(
@@ -2058,13 +2086,17 @@ function AttendanceHome({ displayName, token, onLogout }) {
   }
 
   return (
-    <View style={styles.screen}>
+    <KeyboardAvoidingView
+      style={styles.screen}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+    >
       <View style={styles.glowTop} />
       <View style={styles.glowBottom} />
 
       <ScrollView
         style={styles.homeScroll}
         contentContainerStyle={styles.homeScrollContent}
+        keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
         <Animated.View entering={FadeInUp.duration(450)} style={styles.shell}>
@@ -2189,6 +2221,7 @@ function AttendanceHome({ displayName, token, onLogout }) {
                               style={[
                                 styles.dayLabel,
                                 (!isCurrentMonth || isFutureDate) && styles.dayLabelMuted,
+                                isToday && !isSelected && styles.dayLabelToday,
                                 isSelected && styles.dayLabelSelected
                               ]}
                             >
@@ -2610,6 +2643,7 @@ function AttendanceHome({ displayName, token, onLogout }) {
                                     style={[
                                       styles.dayLabel,
                                       (!isCurrentMonth || isFutureDate) && styles.dayLabelMuted,
+                                      isToday && !isSelected && styles.dayLabelToday,
                                       isSelected && styles.dayLabelSelected
                                     ]}
                                   >
@@ -2958,6 +2992,14 @@ function AttendanceHome({ displayName, token, onLogout }) {
         <BottomTabs activeTab={activeTab} onChange={setActiveTab} />
       </View>
 
+      {selectedGeneratedBill && Platform.OS !== "web" ? (
+        <View style={styles.generatedBillImageCaptureHost} pointerEvents="none">
+          <View ref={generatedBillImageRef} collapsable={false}>
+            <GeneratedBillImage bill={selectedGeneratedBill} contractorName={displayName} />
+          </View>
+        </View>
+      ) : null}
+
       {selectedGeneratedBill ? (
         <View style={styles.generatedPreviewOverlay}>
           <Pressable style={styles.generatedPreviewBackdrop} onPress={() => setSelectedGeneratedBill(null)} />
@@ -3002,7 +3044,11 @@ function AttendanceHome({ displayName, token, onLogout }) {
               </View>
             </View>
 
-            <ScrollView style={styles.generatedPreviewScroll} showsVerticalScrollIndicator={false}>
+            <ScrollView
+              style={styles.generatedPreviewScroll}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+            >
               <View style={styles.billingTable}>
                 <View style={styles.billingTableHeader}>
                   <Text style={[styles.billingHeaderCell, styles.billingNumberCell]}>#</Text>
@@ -3164,7 +3210,7 @@ function AttendanceHome({ displayName, token, onLogout }) {
         </View>
       ) : null}
 
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -3187,45 +3233,23 @@ export default function LoginScreen() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [session, setSession] = useState(null);
+  const [isRestoringSession, setIsRestoringSession] = useState(true);
 
   const cardLift = useSharedValue(0);
   const buttonPress = useSharedValue(0);
   const checkboxPress = useSharedValue(0);
   const passwordTogglePress = useSharedValue(0);
 
-  // useEffect(() => {
-  //   const storedSession = readStoredSession();
-
-  //   if (!storedSession) {
-  //     return;
-  //   }
-
-  //   if (isTokenExpired(storedSession.token)) {
-  //     clearPersistedSession();
-  //     return;
-  //   }
-
-  //   const nextSession = {
-  //     ...storedSession,
-  //     fullName: resolveDisplayName(storedSession)
-  //   };
-
-  //   setSession(nextSession);
-  //   persistSession(nextSession);
-  // }, []);
-
-
   useEffect(() => {
     async function restoreSession() {
       try {
-        const raw = await AsyncStorage.getItem(SESSION_STORAGE_KEY);
-        if (!raw) return;
-
-        const parsed = JSON.parse(raw);
-        if (!parsed?.token) return;
+        const parsed = await readStoredSession();
+        if (!parsed?.token) {
+          return;
+        }
 
         if (isTokenExpired(parsed.token)) {
-          await AsyncStorage.removeItem(SESSION_STORAGE_KEY);
+          await clearPersistedSession();
           return;
         }
 
@@ -3237,6 +3261,8 @@ export default function LoginScreen() {
         setSession(nextSession);
       } catch {
         // ignore
+      } finally {
+        setIsRestoringSession(false);
       }
     }
 
@@ -3302,12 +3328,16 @@ export default function LoginScreen() {
       const nextSession = {
         token: result?.token || "",
         mobile: result?.user?.mobile || mobile.trim(),
-        rememberMe: true,
+        rememberMe,
         fullName: result?.user?.fullName || "User"
       };
 
       setSession(nextSession);
-      await persistSession(nextSession);
+      if (rememberMe) {
+        await persistSession(nextSession);
+      } else {
+        await clearPersistedSession();
+      }
     } catch (error) {
       const message = error.message || "Login failed";
       setErrorMessage(message);
@@ -3345,12 +3375,16 @@ export default function LoginScreen() {
       const nextSession = {
         token: result?.token || "",
         mobile: result?.user?.mobile || mobile.trim(),
-        rememberMe: true,
+        rememberMe,
         fullName: result?.user?.fullName || fullName.trim() || "User"
       };
 
       setSession(nextSession);
-      await persistSession(nextSession);
+      if (rememberMe) {
+        await persistSession(nextSession);
+      } else {
+        await clearPersistedSession();
+      }
     } catch (error) {
       setErrorMessage(error.message || "Registration failed");
     } finally {
@@ -3410,6 +3444,14 @@ export default function LoginScreen() {
     } finally {
       setIsResettingPassword(false);
     }
+  }
+
+  if (isRestoringSession) {
+    return (
+      <View style={[styles.screen, styles.restoreSessionScreen]}>
+        <ActivityIndicator color={palette.blue700} />
+      </View>
+    );
   }
 
   if (session) {
@@ -3498,6 +3540,20 @@ export default function LoginScreen() {
                 <PINEntry
                   label="Password"
                   value={password}
+                  secureTextEntry={!showPassword}
+                  rightAccessory={
+                    <PasswordVisibilityToggle
+                      visible={showPassword}
+                      onPress={() => setShowPassword((current) => !current)}
+                      animatedStyle={passwordToggleStyle}
+                      onPressIn={() => {
+                        passwordTogglePress.value = withTiming(1, { duration: 90 });
+                      }}
+                      onPressOut={() => {
+                        passwordTogglePress.value = withTiming(0, { duration: 120 });
+                      }}
+                    />
+                  }
                   onChangeText={(value) => {
                     setPassword(value);
                     setAuthNotice("");
@@ -3519,6 +3575,20 @@ export default function LoginScreen() {
                     key={`reset-new-${resetFormKey}`}
                     label="New Password"
                     value={resetNewPassword}
+                    secureTextEntry={!showResetNewPassword}
+                    rightAccessory={
+                      <PasswordVisibilityToggle
+                        visible={showResetNewPassword}
+                        onPress={() => setShowResetNewPassword((current) => !current)}
+                        animatedStyle={passwordToggleStyle}
+                        onPressIn={() => {
+                          passwordTogglePress.value = withTiming(1, { duration: 90 });
+                        }}
+                        onPressOut={() => {
+                          passwordTogglePress.value = withTiming(0, { duration: 120 });
+                        }}
+                      />
+                    }
                     onChangeText={(value) => {
                       setResetNewPassword(value);
                       setResetMessage("");
@@ -3529,6 +3599,20 @@ export default function LoginScreen() {
                     key={`reset-confirm-${resetFormKey}`}
                     label="Confirm New Password"
                     value={resetConfirmPassword}
+                    secureTextEntry={!showResetConfirmPassword}
+                    rightAccessory={
+                      <PasswordVisibilityToggle
+                        visible={showResetConfirmPassword}
+                        onPress={() => setShowResetConfirmPassword((current) => !current)}
+                        animatedStyle={passwordToggleStyle}
+                        onPressIn={() => {
+                          passwordTogglePress.value = withTiming(1, { duration: 90 });
+                        }}
+                        onPressOut={() => {
+                          passwordTogglePress.value = withTiming(0, { duration: 120 });
+                        }}
+                      />
+                    }
                     onChangeText={(value) => {
                       setResetConfirmPassword(value);
                       setResetMessage("");
@@ -3664,6 +3748,10 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: palette.bg
+  },
+  restoreSessionScreen: {
+    alignItems: "center",
+    justifyContent: "center"
   },
   keyboardArea: {
     flex: 1
@@ -4562,7 +4650,9 @@ const styles = StyleSheet.create({
     borderColor: "#D9E3EE"
   },
   dayCellToday: {
-    backgroundColor: palette.surface
+    backgroundColor: "#EAF4FF",
+    borderWidth: 1,
+    borderColor: palette.blue700
   },
   dayCellMuted: {
     opacity: 0.42
@@ -4577,6 +4667,10 @@ const styles = StyleSheet.create({
   },
   dayLabelSelected: {
     color: "#F7FBFF"
+  },
+  dayLabelToday: {
+    color: palette.blue800,
+    fontWeight: "900"
   },
   dayLabelMuted: {
     color: palette.textMuted
@@ -5619,6 +5713,157 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     padding: 18,
     backgroundColor: palette.surfaceSoft
+  },
+  generatedBillImageCaptureHost: {
+    position: "absolute",
+    left: -1200,
+    top: 0,
+    width: 390
+  },
+  billImageSheet: {
+    width: 390,
+    padding: 18,
+    backgroundColor: palette.bg
+  },
+  billImageHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 12,
+    padding: 18,
+    borderRadius: 20,
+    backgroundColor: palette.surface,
+    borderWidth: 1,
+    borderColor: palette.border
+  },
+  billImageEyebrow: {
+    color: palette.blue700,
+    fontSize: 10,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 1
+  },
+  billImageTitle: {
+    marginTop: 5,
+    color: palette.blue900,
+    fontSize: 23,
+    fontWeight: "900"
+  },
+  billImageMeta: {
+    marginTop: 5,
+    color: palette.textMuted,
+    fontSize: 11,
+    fontWeight: "700"
+  },
+  billImageContractor: {
+    maxWidth: 136,
+    alignItems: "flex-end"
+  },
+  billImageContractorName: {
+    marginTop: 5,
+    color: palette.blue900,
+    fontSize: 15,
+    fontWeight: "800",
+    textAlign: "right"
+  },
+  billImageTable: {
+    marginTop: 14,
+    borderRadius: 14,
+    overflow: "hidden",
+    backgroundColor: palette.surface,
+    borderWidth: 1,
+    borderColor: palette.border
+  },
+  billImageTableHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: palette.surfaceTint,
+    paddingHorizontal: 8,
+    paddingVertical: 10
+  },
+  billImageTableRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 8,
+    paddingVertical: 11,
+    borderTopWidth: 1,
+    borderTopColor: palette.border
+  },
+  billImageHeaderCell: {
+    color: palette.blue800,
+    fontSize: 11,
+    fontWeight: "900"
+  },
+  billImageCell: {
+    color: palette.blue900,
+    fontSize: 11,
+    fontWeight: "700"
+  },
+  billImageNumberCell: {
+    width: 28,
+    textAlign: "center"
+  },
+  billImageNameCell: {
+    flex: 1.5,
+    paddingHorizontal: 7
+  },
+  billImageSmallCell: {
+    width: 48,
+    textAlign: "center"
+  },
+  billImageAmountCell: {
+    width: 58,
+    textAlign: "right"
+  },
+  billImageEmptyRow: {
+    paddingHorizontal: 14,
+    paddingVertical: 16,
+    borderTopWidth: 1,
+    borderTopColor: palette.border
+  },
+  billImageMuted: {
+    color: palette.textMuted,
+    fontSize: 12,
+    fontWeight: "700"
+  },
+  billImageSummaryRow: {
+    marginTop: 10,
+    minHeight: 44,
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: palette.surfaceTint
+  },
+  billImageSummaryLabel: {
+    color: palette.blue900,
+    fontSize: 13,
+    fontWeight: "900"
+  },
+  billImageSummaryValue: {
+    color: palette.blue900,
+    fontSize: 15,
+    fontWeight: "900"
+  },
+  billImageGrandTotal: {
+    marginTop: 12,
+    minHeight: 54,
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: palette.blue700
+  },
+  billImageGrandTotalLabel: {
+    color: "#F7FBFF",
+    fontSize: 15,
+    fontWeight: "900"
+  },
+  billImageGrandTotalValue: {
+    color: "#F7FBFF",
+    fontSize: 20,
+    fontWeight: "900"
   },
   generatedPreviewOverlay: {
     ...StyleSheet.absoluteFillObject,

@@ -1,4 +1,4 @@
-import { useRef, useEffect } from "react";
+import { useRef } from "react";
 import { StyleSheet, TextInput, View, Text } from "react-native";
 
 const palette = {
@@ -13,7 +13,14 @@ const palette = {
   danger: "#D24B5A"
 };
 
-export function PINEntry({ value = "", onChangeText = () => {}, label = "", error = "" }) {
+export function PINEntry({
+  value = "",
+  onChangeText = () => {},
+  label = "",
+  error = "",
+  secureTextEntry = false,
+  rightAccessory = null
+}) {
   const inputRefs = useRef([null, null, null, null]);
   const pins = value.split("").slice(0, 4);
 
@@ -66,30 +73,37 @@ export function PINEntry({ value = "", onChangeText = () => {}, label = "", erro
     <View style={styles.container}>
       {label ? <Text style={styles.label}>{label}</Text> : null}
       
-      <View style={styles.pinContainer}>
-        {[0, 1, 2, 3].map((index) => (
-          <TextInput
-            key={index}
-            ref={(ref) => {
-              inputRefs.current[index] = ref;
-            }}
-            style={[
-              styles.pinBox,
-              pins[index] && styles.pinBoxFilled,
-              error && styles.pinBoxError
-            ]}
-            value={pins[index]}
-            onChangeText={(newValue) => handlePinChange(index, newValue)}
-            onKeyPress={(e) => handleKeyPress(index, e.nativeEvent.key)}
-            keyboardType="numeric"
-            maxLength={1}
-            secureTextEntry={false}
-            textAlign="center"
-            placeholderTextColor={palette.textMuted}
-            editable={true}
-            selectTextOnFocus={true}
-          />
-        ))}
+      <View style={styles.pinRow}>
+        <View style={styles.pinContainer}>
+          {[0, 1, 2, 3].map((index) => (
+            <TextInput
+              key={index}
+              ref={(ref) => {
+                inputRefs.current[index] = ref;
+              }}
+              style={[
+                styles.pinBox,
+                pins[index] && styles.pinBoxFilled,
+                error && styles.pinBoxError
+              ]}
+              value={secureTextEntry && pins[index] ? "*" : pins[index]}
+              onChangeText={(newValue) => handlePinChange(index, newValue)}
+              onKeyPress={(e) => handleKeyPress(index, e.nativeEvent.key)}
+              keyboardType="numeric"
+              maxLength={1}
+              secureTextEntry={false}
+              autoComplete="off"
+              autoCorrect={false}
+              importantForAutofill="no"
+              textContentType="none"
+              textAlign="center"
+              placeholderTextColor={palette.textMuted}
+              editable={true}
+              selectTextOnFocus={true}
+            />
+          ))}
+        </View>
+        {rightAccessory ? <View style={styles.pinAccessory}>{rightAccessory}</View> : null}
       </View>
 
       {error ? <Text style={styles.errorText}>{error}</Text> : null}
@@ -108,24 +122,40 @@ const styles = StyleSheet.create({
     color: palette.blue900,
     marginBottom: 4
   },
+  pinRow: {
+    width: "100%",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8
+  },
   pinContainer: {
+    flex: 1,
+    width: "100%",
     flexDirection: "row",
     justifyContent: "center",
-    gap: 12,
-    paddingHorizontal: 20
+    gap: 8
+  },
+  pinAccessory: {
+    width: 38,
+    minHeight: 52,
+    alignItems: "center",
+    justifyContent: "center"
   },
   pinBox: {
-    width: 60,
-    height: 70,
+    flex: 1,
+    minWidth: 0,
+    maxWidth: 60,
+    aspectRatio: 0.86,
     borderWidth: 2,
     borderColor: palette.border,
     borderRadius: 16,
-    fontSize: 32,
+    fontSize: 26,
     fontWeight: "700",
     color: palette.blue900,
     textAlign: "center",
-    backgroundColor: palette.surface,
-    transitionDuration: "150ms"
+    textAlignVertical: "center",
+    backgroundColor: palette.surface
   },
   pinBoxFilled: {
     borderColor: palette.blue700,

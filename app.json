@@ -26,7 +26,14 @@
       "package": "com.employee.management.markmate"
     },
     "plugins": [
-      "expo-router"
+      "expo-router",
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Allow Mark Mate to save generated bill images to your gallery.",
+          "savePhotosPermission": "Allow Mark Mate to save generated bill images to your gallery."
+        }
+      ]
     ],
     "extra": {
       "router": {},
